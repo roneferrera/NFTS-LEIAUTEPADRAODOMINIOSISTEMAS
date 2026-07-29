@@ -1334,7 +1334,7 @@ with tab_ajuda:
         ["3", "country_code ISO",     "Ex.: 'us' para Estados Unidos"],
         ["4", "Tabela Paises.xls",    "Lookup pelo ISO Alpha-2"],
         ["5", "Codigo Dominio",       "Ex.: 76 para ESTADOS UNIDOS"],
-        ["6", "Reg. 0020 campo 11",   "Preenchido automaticamente"],
+        ["6", "Reg. 0020 campo 11",   "Preenchido automaticamente"],    
     ], columns=["Passo", "Etapa", "Detalhe"])
     st.dataframe(df_fluxo, use_container_width=True, hide_index=True)
 
