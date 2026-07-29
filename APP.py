@@ -16,11 +16,11 @@ COD_ISS_RETIDO      = "18"
 COD_ISS_NORMAL      = "3"
 
 # ─────────────────────────────────────────────
-# URLs DOS ARQUIVOS NO GITHUB
+# URLs RAW DO GITHUB
 # ─────────────────────────────────────────────
-GITHUB_RAW_BASE  = "https://raw.githubusercontent.com/roneferrera/NFTS-LEIAUTEPADRAODOMINIOSISTEMAS/main"
-URL_ACUMULADORES = f"{GITHUB_RAW_BASE}/Acumuladores.xlsx"
-URL_PAISES       = f"{GITHUB_RAW_BASE}/Pa%C3%ADses.xlsx"
+_BASE = "https://raw.githubusercontent.com/roneferrera/NFTS-LEIAUTEPADRAODOMINIOSISTEMAS/main"
+URL_ACUMULADORES = f"{_BASE}/Acumuladores.xlsx"
+URL_PAISES       = f"{_BASE}/Pa%C3%ADses.xlsx"
 
 # ─────────────────────────────────────────────
 # HELPERS
@@ -66,19 +66,17 @@ def limpa_numero(value):
 # ─────────────────────────────────────────────
 # CARREGA ACUMULADORES DO EXCEL
 # ─────────────────────────────────────────────
-def carrega_acumuladores(file_bytes):
+def _parse_acumuladores(file_bytes: bytes) -> dict:
     df = pd.read_excel(
         io.BytesIO(file_bytes),
         sheet_name="Acumuladores",
-        dtype=str
+        dtype=str,
     )
     df.columns = [c.strip() for c in df.columns]
     lookup = {}
     for _, row in df.iterrows():
-        paulistana = str(row.get("PAULISTANA", "")).strip()
-        paulistana = re.sub(r"\.0$", "", paulistana).strip()
-        acumulador = str(row.get("Codigo ACUMULADOR", "")).strip()
-        acumulador = re.sub(r"\.0$", "", acumulador).strip()
+        paulistana = re.sub(r"\.0$", "", str(row.get("PAULISTANA", "")).strip()).strip()
+        acumulador = re.sub(r"\.0$", "", str(row.get("Codigo ACUMULADOR", "")).strip()).strip()
         if paulistana and paulistana not in ("", "nan"):
             lookup[paulistana] = acumulador
     return lookup
@@ -86,18 +84,17 @@ def carrega_acumuladores(file_bytes):
 # ─────────────────────────────────────────────
 # CARREGA PAÍSES DO EXCEL
 # ─────────────────────────────────────────────
-def carrega_paises(file_bytes):
+def _parse_paises(file_bytes: bytes) -> dict:
     df = pd.read_excel(
         io.BytesIO(file_bytes),
         sheet_name="RELAÇÃO DE PAÍSES",
-        dtype=str
+        dtype=str,
     )
     df.columns = [c.strip() for c in df.columns]
     lookup = {}
     for _, row in df.iterrows():
         nome   = str(row.get("Nome", "")).strip().upper()
-        codigo = str(row.get("Código", "")).strip()
-        codigo = re.sub(r"\.0$", "", codigo).strip()
+        codigo = re.sub(r"\.0$", "", str(row.get("Código", "")).strip()).strip()
         if nome and codigo and nome != "NAN":
             lookup[nome] = codigo
     return lookup
@@ -107,15 +104,15 @@ def carrega_paises(file_bytes):
 # ─────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def carrega_acumuladores_github(url: str) -> dict:
-    resp = requests.get(url, timeout=15)
+    resp = requests.get(url, timeout=20)
     resp.raise_for_status()
-    return carrega_acumuladores(resp.content)
+    return _parse_acumuladores(resp.content)
 
 @st.cache_data(show_spinner=False)
 def carrega_paises_github(url: str) -> dict:
-    resp = requests.get(url, timeout=15)
+    resp = requests.get(url, timeout=20)
     resp.raise_for_status()
-    return carrega_paises(resp.content)
+    return _parse_paises(resp.content)
 
 # ─────────────────────────────────────────────
 # REGRAS DE NEGÓCIO
@@ -124,20 +121,17 @@ def determina_especie(_row) -> str:
     return ESPECIE_UNICA
 
 def determina_cfop(row) -> str:
-    ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    ind_num = re.sub(r"\.0$", "", ind).strip()
+    ind_num = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     if ind_num == "3":
         return CFOP_FORA
     uf = safe(row, "UF do Prestador").upper().strip()
     return CFOP_SP if uf == "SP" else CFOP_FORA
 
 def determina_acumulador(row, lookup_acum: dict) -> str:
-    ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    ind_num = re.sub(r"\.0$", "", ind).strip()
+    ind_num = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     if ind_num == "3":
         return ACUMULADOR_EXTERIOR
-    paulistana_raw = safe(row, "Código do Serviço Prestado na NFTS")
-    paulistana = limpa_numero(paulistana_raw)
+    paulistana = limpa_numero(safe(row, "Código do Serviço Prestado na NFTS"))
     acum = lookup_acum.get(paulistana, "")
     if not acum:
         return f"AVISO: PAULISTANA {paulistana} NAO MAPEADA"
@@ -148,22 +142,19 @@ def determina_cod_iss(row) -> str:
     return COD_ISS_RETIDO if retido == "S" else COD_ISS_NORMAL
 
 def determina_fornecedor(row) -> str:
-    ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    ind_num = re.sub(r"\.0$", "", ind).strip()
+    ind_num = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     if ind_num == "3":
         return ""
     return limpa_cnpj(safe(row, "CPF/CNPJ do Prestador"))
 
 def determina_uf(row) -> str:
-    ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    ind_num = re.sub(r"\.0$", "", ind).strip()
+    ind_num = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     if ind_num == "3":
         return "EX"
     return safe(row, "UF do Prestador").strip()
 
 def determina_cod_pais(row, lookup_pais: dict) -> str:
-    ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    ind_num = re.sub(r"\.0$", "", ind).strip()
+    ind_num = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     if ind_num != "3":
         return ""
     bairro   = safe(row, "Bairro do Prestador").upper().strip()
@@ -356,17 +347,19 @@ with st.sidebar:
     )
 
 # ── Carrega Acumuladores e Países do GitHub ──
-with st.spinner("Carregando tabelas de referência do GitHub..."):
+with st.spinner("🔄 Carregando tabelas de referência do GitHub..."):
     try:
         lookup_acum = carrega_acumuladores_github(URL_ACUMULADORES)
         lookup_pais = carrega_paises_github(URL_PAISES)
         st.sidebar.success(
-            f"✅ {len(lookup_acum)} acumuladores | {len(lookup_pais)} países carregados"
+            f"✅ {len(lookup_acum)} acumuladores\n\n"
+            f"✅ {len(lookup_pais)} países\n\n"
+            f"_(carregados do GitHub)_"
         )
     except Exception as e:
         st.error(
-            f"❌ Erro ao carregar arquivos do GitHub: {e}\n\n"
-            "Verifique se a URL está correta e o repositório é público."
+            f"❌ Erro ao carregar arquivos do GitHub:\n\n`{e}`\n\n"
+            "Verifique se o repositório é público e os arquivos existem na branch `main`."
         )
         st.stop()
 
@@ -374,15 +367,15 @@ with st.spinner("Carregando tabelas de referência do GitHub..."):
 st.subheader("📂 Upload do Arquivo NFTS")
 
 file_nfts = st.file_uploader(
-    "CSV NFTS",
+    "CSV NFTS — exportado do portal NFTS da Prefeitura de SP",
     type=["csv"],
     key="nfts",
-    help="Arquivo exportado do portal NFTS da Prefeitura de SP"
 )
 
 # ── Processamento ─────────────────────────────
 if file_nfts:
 
+    # Lê o CSV tentando separadores e encodings
     try:
         df_nfts = pd.read_csv(file_nfts, sep=",", dtype=str, encoding="utf-8")
     except Exception:
@@ -397,7 +390,10 @@ if file_nfts:
 
     col_tipo = "Tipo de Registro"
     if col_tipo not in df_nfts.columns:
-        st.error(f"Coluna '{col_tipo}' não encontrada. Colunas: {list(df_nfts.columns)}")
+        st.error(
+            f"Coluna '{col_tipo}' não encontrada no CSV.\n\n"
+            f"Colunas encontradas: `{list(df_nfts.columns)}`"
+        )
         st.stop()
 
     df_notas = df_nfts[df_nfts[col_tipo].str.strip().str.upper() == "4"].copy()
@@ -408,7 +404,8 @@ if file_nfts:
 
     st.success(
         f"✅ {len(df_notas)} nota(s) carregada(s) | "
-        f"{len(lookup_acum)} acumuladores | {len(lookup_pais)} países"
+        f"{len(lookup_acum)} acumuladores | "
+        f"{len(lookup_pais)} países"
     )
 
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -492,13 +489,13 @@ if file_nfts:
         with st.expander("CSV NFTS — Dados brutos"):
             st.dataframe(df_notas, use_container_width=True)
 
-        with st.expander(f"Acumuladores carregados ({len(lookup_acum)} itens)"):
+        with st.expander(f"Acumuladores carregados do GitHub ({len(lookup_acum)} itens)"):
             st.dataframe(
                 pd.DataFrame(list(lookup_acum.items()), columns=["PAULISTANA", "Acumulador"]),
                 use_container_width=True,
             )
 
-        with st.expander(f"Países carregados ({len(lookup_pais)} itens)"):
+        with st.expander(f"Países carregados do GitHub ({len(lookup_pais)} itens)"):
             st.dataframe(
                 pd.DataFrame(list(lookup_pais.items()), columns=["Nome", "Código"]),
                 use_container_width=True,
@@ -533,7 +530,7 @@ if file_nfts:
                         determina_uf(row),
                         determina_cod_iss(row),
                         determina_cod_pais(row, lookup_pais),
-                    ]
+                    ],
                 }
                 st.dataframe(
                     pd.DataFrame(debug_data),
@@ -568,9 +565,17 @@ if file_nfts:
         ], columns=["Campo", "Nome", "Regra", "Valor/Formato"]),
         use_container_width=True, hide_index=True)
 
+        st.markdown("### Exemplo de saída esperada com os dados reais")
+        st.dataframe(pd.DataFrame([
+            ["196", "Tenjin INC",  "Ind.=3 / EXT / SACRAMENTO", "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
+            ["195", "Tenjin INC",  "Ind.=3 / EXT",              "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
+            ["194", "ALELO S.A.", "Ind.=2 / SP / PAULISTANA=6157","39 / 1933 / 2237 / UF=SP / ISS=3"],
+        ], columns=["NFTS", "Prestador", "Situação", "Espécie/CFOP/Acum/UF/ISS"]),
+        use_container_width=True, hide_index=True)
+
 else:
     st.info(
-        "👆 Faça upload do CSV NFTS para iniciar.\n\n"
+        "👆 Faça upload do **CSV NFTS** para iniciar.\n\n"
         "Os arquivos **Acumuladores.xlsx** e **Países.xlsx** são carregados "
         "automaticamente do GitHub."
     )
