@@ -33,20 +33,27 @@ def safe(row, col, default=""):
 
 def fmt_decimal(value, decimals=2):
     """
-    Converte valor para decimal com N casas.
-    Suporta: 1.747,85 | 1747.85 | 1747,85
+    Converte valor monetário para decimal com N casas.
+    Suporta todos os formatos:
+      1.747,85  → 1747.85  (ponto=milhar, vírgula=decimal)
+      1747.85   → 1747.85  (ponto=decimal, sem milhar)
+      1747,85   → 1747.85  (vírgula=decimal, sem milhar)
+      1747      → 1747.00
     """
     try:
         s = str(value).strip()
         if not s or s in ("nan", ""):
             return f"0.{'0'*decimals}"
-        # Se tem vírgula E ponto → ponto é milhar, vírgula é decimal
+
+        # Tem ponto E vírgula → ponto é milhar, vírgula é decimal
         if "," in s and "." in s:
             s = s.replace(".", "").replace(",", ".")
-        # Se só tem vírgula → vírgula é decimal
+        # Só vírgula → vírgula é decimal
         elif "," in s:
             s = s.replace(",", ".")
-        # Se só tem ponto → ponto é decimal (já está correto)
+        # Só ponto → ponto é decimal (não mexe)
+        # Sem separador → inteiro
+
         v = float(s)
         return f"{v:.{decimals}f}"
     except Exception:
@@ -175,7 +182,7 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
 # ─────────────────────────────────────────────
 
 def reg_0000(cnpj_empresa: str) -> str:
-    # 2 campos — pipe final obrigatório para o Domínio identificar o tamanho correto
+    # 2 campos conforme leiaute oficial — pipe final obrigatório
     return monta_linha(["0000", cnpj_empresa])
     # resultado: 0000|20586841000130|
 
@@ -242,116 +249,118 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         serie = ""
 
     # ── DATAS ──────────────────────────────────────────────────────────────
-    # Campo 11 = Data da emissão (Data Hora Emissão NFTS)
-    # Campo 12 = Data da entrada (Data da Prestação de Serviços)
-    # Regra Domínio: emissão (campo 11) deve ser <= entrada (campo 12)
-    # No CSV: "Data Hora Emissão NFTS" = quando a nota foi emitida (anterior)
-    #         "Data da Prestação de Serviços" = quando o serviço foi prestado (posterior ou igual)
-    dt_emissao = fmt_date(safe(row, "Data Hora Emissão NFTS"))
-    dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
+    # Leiaute campo 11 = "Data da entrada" → deve ser a mais ANTIGA (emissão da NFTS)
+    # Leiaute campo 12 = "Data emissão"    → deve ser a mais RECENTE (prestação do serviço)
+    # Regra Domínio: campo 11 (entrada) deve ser <= campo 12 (emissão)
+    # No CSV: "Data Hora Emissão NFTS" é quando a nota foi emitida (anterior)
+    #         "Data da Prestação de Serviços" é quando o serviço ocorreu (posterior ou igual)
+    dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))       # entrada ← emissão NFTS
+    dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços")) # emissão ← prestação
 
+    # ── VALOR ──────────────────────────────────────────────────────────────
+    # fmt_decimal corrigido: trata 1.747,85 → 1747.85 sem destruir o ponto decimal
     valor   = fmt_decimal(safe(row, "Valor dos Serviços"))
     cod_iss = determina_cod_iss(row)
 
     campos = [
-        "1000",      # 1  - Identificação do registro
-        especie,     # 2  - Código da espécie
-        fornecedor,  # 3  - Inscrição fornecedor
-        "",          # 4  - Código de Exclusão da DIEF
-        acumulador,  # 5  - Código do acumulador
-        cfop,        # 6  - CFOP
-        "",          # 7  - Segmento
-        num_doc,     # 8  - Número do documento
-        serie,       # 9  - Série
-        "",          # 10 - Numero do documento final
-        dt_emissao,  # 11 - Data da entrada  ← recebe dt_emissao (a mais antiga)
-        dt_entrada,  # 12 - Data emissão     ← recebe dt_entrada (a mais recente)
-        valor,       # 13 - Valor contábil
-        "",          # 14 - Valor da exclusão da DIEF
-        "",          # 15 - Observação
-        "",          # 16 - Modalidade do frete
-        "",          # 17 - Emitente da nota fiscal
-        "",          # 18 - CFOP estendido/detalhamento
-        "",          # 19 - Código da transferência de crédito
-        cod_iss,     # 20 - Código do Recolhimento do ISS Retido
-        "",          # 21 - Código do Recolhimento do IRRF
-        "",          # 22 - Código da observação
-        "",          # 23 - Data do visto
-        "",          # 24 - Fato gerador da CRF
-        "",          # 25 - Fato gerador do IRRF
-        "",          # 26 - Valor do frete
-        "",          # 27 - Valor do seguro
-        "",          # 28 - Valor das despesas
-        "",          # 29 - Valor do PIS
-        "",          # 30 - Código Antecipação Tributária
-        "",          # 31 - Valor do COFINS
-        "",          # 32 - Valor DARE
-        "",          # 33 - Alíquota DARE
-        "",          # 34 - Valor base ICMS ST
-        "",          # 35 - Entradas cuja saída é isenta
-        "",          # 36 - Outras entradas isentas
-        "",          # 37 - Valor transporte incluído na base
-        "",          # 38 - Código de ressarcimento
-        "",          # 39 - Valor produtos
-        "",          # 40 - Município Origem
-        "",          # 41 - Situação da Nota
-        "",          # 42 - Código da situação tributária
-        "",          # 43 - Sub serie
-        "",          # 44 - Inscrição estadual do fornecedor
-        "",          # 45 - Inscrição municipal do fornecedor
-        "",          # 46 - Código da operação e prestação
-        "",          # 47 - Valor a ser deduzido da receita tributável
-        "",          # 48 - Competência
-        "",          # 49 - Operação
-        "",          # 50 - Número do parecer fiscal
-        "",          # 51 - Data do parecer fiscal
-        "",          # 52 - Número da declaração de Importação
-        "",          # 53 - Possui benefício fiscal
-        "",          # 54 - Chave da nota fiscal eletrônica
-        "",          # 55 - Código de recolhimento do FETHAB
-        "",          # 56 - Responsável pelo recolhimento do FETHAB
-        "",          # 57 - CFOP documento fiscal
-        "",          # 58 - Tipo de CT-e
-        "",          # 59 - CT-e referência
-        "",          # 60 - Modalidade da importação
-        "",          # 61 - Código da informação complementar
-        "",          # 62 - Informação complementar
-        "",          # 63 - Classe de consumo
-        "",          # 64 - Tipo de ligação
-        "",          # 65 - Grupo de tensão
-        "",          # 66 - Tipo de assinante
-        "",          # 67 - KWH consumido
-        "",          # 68 - Valor fornecido/consumido
-        "",          # 69 - Valor cobrado de terceiros
-        "",          # 70 - Tipo do documento de importação
-        "",          # 71 - Número do Ato Concessório Drawback
-        "",          # 72 - Natureza do frete PIS/COFINS
-        "",          # 73 - CST PIS/COFINS
-        "",          # 74 - Base do crédito PIS/COFINS
-        "",          # 75 - Valor serviços/itens PIS/COFINS
-        "",          # 76 - Base de cálculo PIS/COFINS
-        "",          # 77 - Alíquota de PIS
-        "",          # 78 - Alíquota de COFINS
-        "",          # 79 - Chave de NFSe
-        "",          # 80 - Número do processo ou ato concessório
-        "",          # 81 - Origem do processo
-        "",          # 82 - Data da escrituração
-        "",          # 83 - CFPS
-        "",          # 84 - Natureza da receita PIS/COFINS
-        "",          # 85 - CST IPI
-        "",          # 86 - Lançamentos de SCP
-        "",          # 87 - Tipo de serviço
-        "",          # 88 - Município destino
-        "",          # 89 - Pedágio
-        "",          # 90 - IPI
-        "",          # 91 - ICMS ST
-        "",          # 92 - Classificação EFD-Reinf (tipo)
-        "",          # 93 - Classificação EFD-Reinf (indicativo)
-        "",          # 94 - Número do documento de arrecadação
-        "",          # 95 - Tipo do título
-        "",          # 96 - Identificação
-        "",          # 97 - ICMS Desonerado
-        "",          # 98 - IPI Devolução
+        "1000",       # 1  - Identificação do registro
+        especie,      # 2  - Código da espécie
+        fornecedor,   # 3  - Inscrição fornecedor
+        "",           # 4  - Código de Exclusão da DIEF
+        acumulador,   # 5  - Código do acumulador
+        cfop,         # 6  - CFOP
+        "",           # 7  - Segmento
+        num_doc,      # 8  - Número do documento
+        serie,        # 9  - Série
+        "",           # 10 - Numero do documento final
+        dt_campo11,   # 11 - Data da entrada  ← Data Hora Emissão NFTS
+        dt_campo12,   # 12 - Data emissão     ← Data da Prestação de Serviços
+        valor,        # 13 - Valor contábil
+        "",           # 14 - Valor da exclusão da DIEF
+        "",           # 15 - Observação
+        "",           # 16 - Modalidade do frete
+        "",           # 17 - Emitente da nota fiscal
+        "",           # 18 - CFOP estendido/detalhamento
+        "",           # 19 - Código da transferência de crédito
+        cod_iss,      # 20 - Código do Recolhimento do ISS Retido
+        "",           # 21 - Código do Recolhimento do IRRF
+        "",           # 22 - Código da observação
+        "",           # 23 - Data do visto
+        "",           # 24 - Fato gerador da CRF
+        "",           # 25 - Fato gerador do IRRF
+        "",           # 26 - Valor do frete
+        "",           # 27 - Valor do seguro
+        "",           # 28 - Valor das despesas
+        "",           # 29 - Valor do PIS
+        "",           # 30 - Código Antecipação Tributária
+        "",           # 31 - Valor do COFINS
+        "",           # 32 - Valor DARE
+        "",           # 33 - Alíquota DARE
+        "",           # 34 - Valor base ICMS ST
+        "",           # 35 - Entradas cuja saída é isenta
+        "",           # 36 - Outras entradas isentas
+        "",           # 37 - Valor transporte incluído na base
+        "",           # 38 - Código de ressarcimento
+        "",           # 39 - Valor produtos
+        "",           # 40 - Município Origem
+        "",           # 41 - Situação da Nota
+        "",           # 42 - Código da situação tributária
+        "",           # 43 - Sub serie
+        "",           # 44 - Inscrição estadual do fornecedor
+        "",           # 45 - Inscrição municipal do fornecedor
+        "",           # 46 - Código da operação e prestação
+        "",           # 47 - Valor a ser deduzido da receita tributável
+        "",           # 48 - Competência
+        "",           # 49 - Operação
+        "",           # 50 - Número do parecer fiscal
+        "",           # 51 - Data do parecer fiscal
+        "",           # 52 - Número da declaração de Importação
+        "",           # 53 - Possui benefício fiscal
+        "",           # 54 - Chave da nota fiscal eletrônica
+        "",           # 55 - Código de recolhimento do FETHAB
+        "",           # 56 - Responsável pelo recolhimento do FETHAB
+        "",           # 57 - CFOP documento fiscal
+        "",           # 58 - Tipo de CT-e
+        "",           # 59 - CT-e referência
+        "",           # 60 - Modalidade da importação
+        "",           # 61 - Código da informação complementar
+        "",           # 62 - Informação complementar
+        "",           # 63 - Classe de consumo
+        "",           # 64 - Tipo de ligação
+        "",           # 65 - Grupo de tensão
+        "",           # 66 - Tipo de assinante
+        "",           # 67 - KWH consumido
+        "",           # 68 - Valor fornecido/consumido
+        "",           # 69 - Valor cobrado de terceiros
+        "",           # 70 - Tipo do documento de importação
+        "",           # 71 - Número do Ato Concessório Drawback
+        "",           # 72 - Natureza do frete PIS/COFINS
+        "",           # 73 - CST PIS/COFINS
+        "",           # 74 - Base do crédito PIS/COFINS
+        "",           # 75 - Valor serviços/itens PIS/COFINS
+        "",           # 76 - Base de cálculo PIS/COFINS
+        "",           # 77 - Alíquota de PIS
+        "",           # 78 - Alíquota de COFINS
+        "",           # 79 - Chave de NFSe
+        "",           # 80 - Número do processo ou ato concessório
+        "",           # 81 - Origem do processo
+        "",           # 82 - Data da escrituração
+        "",           # 83 - CFPS
+        "",           # 84 - Natureza da receita PIS/COFINS
+        "",           # 85 - CST IPI
+        "",           # 86 - Lançamentos de SCP
+        "",           # 87 - Tipo de serviço
+        "",           # 88 - Município destino
+        "",           # 89 - Pedágio
+        "",           # 90 - IPI
+        "",           # 91 - ICMS ST
+        "",           # 92 - Classificação EFD-Reinf (tipo)
+        "",           # 93 - Classificação EFD-Reinf (indicativo)
+        "",           # 94 - Número do documento de arrecadação
+        "",           # 95 - Tipo do título
+        "",           # 96 - Identificação
+        "",           # 97 - ICMS Desonerado
+        "",           # 98 - IPI Devolução
     ]
     return monta_linha(campos)
 
@@ -365,6 +374,7 @@ def reg_1020(row) -> str:
     aliquota      = fmt_decimal(aliquota_raw)
     cod_iss       = determina_cod_iss(row)
 
+    # Verifica se há ISS a lançar
     try:
         s = str(valor_iss_raw).strip()
         if "," in s and "." in s:
@@ -434,8 +444,8 @@ def converte_nfts(
         valor      = fmt_decimal(safe(row, "Valor dos Serviços"))
         valor_iss  = fmt_decimal(safe(row, "Valor ISS"))
         iss_retido = safe(row, "ISS Retido").upper().strip()
-        dt_emissao = fmt_date(safe(row, "Data Hora Emissão NFTS"))
-        dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
+        dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))
+        dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços"))
 
         if incluir_0020:
             chave_forn = fornecedor if fornecedor else razao
@@ -457,19 +467,19 @@ def converte_nfts(
             linhas.append(reg_1151(row))
 
         preview.append({
-            "NFTS":       num_nfts,
-            "Prestador":  razao,
-            "Especie":    especie,
-            "CFOP":       cfop,
-            "Acumulador": acumulador,
-            "UF":         uf,
-            "Dt Emissão": dt_emissao,
-            "Dt Entrada": dt_entrada,
-            "Valor":      valor,
-            "ISS":        valor_iss,
-            "ISS Retido": iss_retido,
-            "Cód ISS":    cod_iss,
-            "Fornecedor": fornecedor,
+            "NFTS":           num_nfts,
+            "Prestador":      razao,
+            "Especie":        especie,
+            "CFOP":           cfop,
+            "Acumulador":     acumulador,
+            "UF":             uf,
+            "C11-Dt Entrada": dt_campo11,
+            "C12-Dt Emissão": dt_campo12,
+            "Valor":          valor,
+            "ISS":            valor_iss,
+            "ISS Retido":     iss_retido,
+            "Cód ISS":        cod_iss,
+            "Fornecedor":     fornecedor,
         })
 
     return "\n".join(linhas), pd.DataFrame(preview)
@@ -667,14 +677,17 @@ if file_nfts:
             for _, row in df_notas.iterrows():
                 nfts = safe(row, "Nº NFTS")
                 st.markdown(f"**NFTS {nfts}**")
+                val_bruto = safe(row, "Valor dos Serviços")
                 debug_data = {
                     "Campo": [
                         "Indicador Prestador", "CPF/CNPJ Prestador", "Razão Social",
                         "UF Prestador", "PAULISTANA", "ISS Retido",
-                        "Valor Serviços", "Valor ISS", "Alíquota",
+                        "Valor Serviços (bruto)", "Valor Serviços (convertido)",
+                        "Valor ISS", "Alíquota",
                         "→ Especie", "→ CFOP", "→ Acumulador",
                         "→ Fornecedor", "→ UF", "→ Cód ISS", "→ Cód País",
-                        "→ Dt Emissão (campo 11)", "→ Dt Entrada (campo 12)",
+                        "→ C11 Data entrada (Emissão NFTS)",
+                        "→ C12 Data emissão (Prestação Serviço)",
                     ],
                     "Valor": [
                         safe(row, "Indicador de CPF/CNPJ do Prestador"),
@@ -683,7 +696,8 @@ if file_nfts:
                         safe(row, "UF do Prestador"),
                         limpa_numero(safe(row, "Código do Serviço Prestado na NFTS")),
                         safe(row, "ISS Retido"),
-                        safe(row, "Valor dos Serviços"),
+                        val_bruto,
+                        fmt_decimal(val_bruto),
                         safe(row, "Valor ISS"),
                         safe(row, "Alíquota"),
                         determina_especie(row),
@@ -716,23 +730,31 @@ if file_nfts:
         ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"]),
         use_container_width=True, hide_index=True)
 
-        st.markdown("### Campos de data no Registro 1000")
+        st.markdown("### Lógica das datas no Registro 1000")
         st.dataframe(pd.DataFrame([
-            ["Campo 11", "Data entrada",  "Data Hora Emissão NFTS",        "Deve ser ≤ campo 12"],
-            ["Campo 12", "Data emissão",  "Data da Prestação de Serviços", "Deve ser ≥ campo 11"],
-        ], columns=["Campo", "Nome Domínio", "Fonte CSV", "Regra"]),
+            ["Campo 11", "Data da entrada", "Data Hora Emissão NFTS",        "Mais antiga — deve ser ≤ campo 12"],
+            ["Campo 12", "Data emissão",    "Data da Prestação de Serviços", "Mais recente — deve ser ≥ campo 11"],
+        ], columns=["Campo", "Nome Domínio", "Fonte no CSV", "Regra"]),
+        use_container_width=True, hide_index=True)
+
+        st.markdown("### Lógica do valor contábil")
+        st.dataframe(pd.DataFrame([
+            ["1.747,85", "ponto=milhar, vírgula=decimal", "1747.85"],
+            ["1747.85",  "ponto=decimal",                 "1747.85"],
+            ["1747,85",  "vírgula=decimal",               "1747.85"],
+        ], columns=["Valor no CSV", "Interpretação", "Resultado"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Campos principais do Registro 1000")
         st.dataframe(pd.DataFrame([
-            ["Campo 2",  "Espécie",    "Todas as notas",                     "39"],
-            ["Campo 3",  "Fornecedor", "Nacional = CNPJ / Exterior = vazio", "—"],
-            ["Campo 5",  "Acumulador", "Exterior = 2551 / Nacional = lookup","—"],
-            ["Campo 6",  "CFOP",       "SP = 1933 / Outros/EXT = 2933",      "—"],
-            ["Campo 11", "Dt entrada", "Data Hora Emissão NFTS",             "dd/mm/aaaa"],
-            ["Campo 12", "Dt emissão", "Data da Prestação de Serviços",      "dd/mm/aaaa"],
-            ["Campo 13", "Valor",      "Valor dos Serviços",                 "decimal"],
-            ["Campo 20", "Cód ISS",    "ISS Retido S = 18 / N = 3",         "—"],
+            ["Campo 2",  "Espécie",     "Todas as notas",                     "39"],
+            ["Campo 3",  "Fornecedor",  "Nacional = CNPJ / Exterior = vazio", "—"],
+            ["Campo 5",  "Acumulador",  "Exterior = 2551 / Nacional = lookup","—"],
+            ["Campo 6",  "CFOP",        "SP = 1933 / Outros/EXT = 2933",      "—"],
+            ["Campo 11", "Dt entrada",  "Data Hora Emissão NFTS",             "dd/mm/aaaa"],
+            ["Campo 12", "Dt emissão",  "Data da Prestação de Serviços",      "dd/mm/aaaa"],
+            ["Campo 13", "Valor",       "Valor dos Serviços",                 "decimal 2 casas"],
+            ["Campo 20", "Cód ISS",     "ISS Retido S = 18 / N = 3",         "—"],
         ], columns=["Campo", "Nome", "Regra", "Valor/Formato"]),
         use_container_width=True, hide_index=True)
 
