@@ -32,16 +32,30 @@ def safe(row, col, default=""):
     return str(val).strip()
 
 def fmt_decimal(value, casas=2):
+    """
+    Converte valor para formato Domínio Sistemas.
+    O Domínio aceita VÍRGULA como separador decimal (conforme exemplo oficial).
+    Exemplos:
+      1.747,85  → 1747,85   (ponto=milhar, vírgula=decimal) ✅
+      1747.85   → 1747,85   (ponto=decimal)                 ✅
+      1747,85   → 1747,85   (vírgula=decimal)               ✅
+      2,90      → 2,90      (alíquota ISS)                  ✅
+      50,68     → 50,68     (ISS)                           ✅
+    """
     try:
         s = str(value).strip()
         if not s or s in ("nan", ""):
             return "0"
+        # ponto E vírgula → ponto=milhar, vírgula=decimal
         if "," in s and "." in s:
             s = s.replace(".", "").replace(",", ".")
+        # só vírgula → vírgula=decimal
         elif "," in s:
             s = s.replace(",", ".")
+        # só ponto → ponto=decimal (não mexe)
         v = float(s)
-        return str(int(round(v * (10 ** casas))))
+        # ✅ Retorna com vírgula decimal, conforme padrão Domínio
+        return f"{v:.{casas}f}".replace(".", ",")
     except Exception:
         return "0"
 
@@ -161,36 +175,27 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
     return lookup_pais.get("ESTADOS UNIDOS", "76")
 
 # ─────────────────────────────────────────────
-# ✅ ALERTA: NOTAS DUPLICADAS (mesmo fornecedor + mesmo número)
+# ALERTA: NOTAS DUPLICADAS
 # ─────────────────────────────────────────────
 def detecta_duplicatas(df_notas) -> pd.DataFrame:
-    """
-    Retorna DataFrame com as notas duplicadas:
-    mesmo Razão Social do Prestador + mesmo Número do Documento.
-    """
     df = df_notas.copy()
-    df["_razao"]  = df.apply(lambda r: safe(r, "Razão Social do Prestador"), axis=1)
+    df["_razao"]   = df.apply(lambda r: safe(r, "Razão Social do Prestador"), axis=1)
     df["_num_doc"] = df.apply(lambda r: limpa_numero(safe(r, "Número do Documento")), axis=1)
-    df["_chave"]  = df["_razao"] + "||" + df["_num_doc"]
-
+    df["_chave"]   = df["_razao"] + "||" + df["_num_doc"]
     duplicados = df[df.duplicated(subset=["_chave"], keep=False)].copy()
     if duplicados.empty:
         return pd.DataFrame()
-
     return duplicados[[
-        "Nº NFTS",
-        "Razão Social do Prestador",
-        "Número do Documento",
-        "Data Hora Emissão NFTS",
-        "Valor dos Serviços",
-        "ISS Retido",
+        "Nº NFTS", "Razão Social do Prestador",
+        "Número do Documento", "Data Hora Emissão NFTS",
+        "Valor dos Serviços", "ISS Retido",
     ]].rename(columns={
-        "Nº NFTS":                    "NFTS",
-        "Razão Social do Prestador":  "Prestador",
-        "Número do Documento":        "Nº Documento",
-        "Data Hora Emissão NFTS":     "Data Emissão",
-        "Valor dos Serviços":         "Valor",
-        "ISS Retido":                 "ISS Retido",
+        "Nº NFTS":                   "NFTS",
+        "Razão Social do Prestador": "Prestador",
+        "Número do Documento":       "Nº Documento",
+        "Data Hora Emissão NFTS":    "Data Emissão",
+        "Valor dos Serviços":        "Valor",
+        "ISS Retido":                "ISS Retido",
     })
 
 # ─────────────────────────────────────────────
@@ -207,7 +212,7 @@ def reg_0020(row, lookup_pais: dict) -> str:
     ind_num     = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     fornecedor  = determina_fornecedor(row)
     razao       = safe(row, "Razão Social do Prestador")[:150]
-    apelido     = razao[:40]   # ✅ Campo 4 — nome reduzido = razão social truncada em 40 chars
+    apelido     = razao[:40]   # ✅ Nome reduzido obrigatório
     endereco    = safe(row, "Endereço do Prestador")
     numero_end  = limpa_numero(safe(row, "Número do Endereço do Prestador"))
     complemento = safe(row, "Complemento do Endereço do Prestador")
@@ -221,7 +226,7 @@ def reg_0020(row, lookup_pais: dict) -> str:
         "0020",      # 1
         fornecedor,  # 2
         razao,       # 3
-        apelido,     # 4  ✅ Nome reduzido obrigatório
+        apelido,     # 4  ✅ Nome reduzido
         endereco,    # 5
         numero_end,  # 6
         complemento, # 7
@@ -267,7 +272,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
 
     dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))
     dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços"))
-    valor      = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
+    valor      = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)  # ✅ ex: 1747,85
     cod_iss    = determina_cod_iss(row)
 
     campos = [
@@ -283,7 +288,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 10
         dt_campo11,  # 11
         dt_campo12,  # 12
-        valor,       # 13 ✅ Valor contábil
+        valor,       # 13 ✅ Valor contábil  ex: 1747,85
         "",          # 14
         "",          # 15
         "",          # 16
@@ -379,9 +384,9 @@ def reg_1020(row) -> str:
     aliquota_raw  = safe(row, "Alíquota")
     cod_iss       = determina_cod_iss(row)
 
-    valor_serv = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
-    valor_iss  = fmt_decimal(valor_iss_raw, casas=2)
-    aliquota   = fmt_decimal(aliquota_raw, casas=2)
+    valor_serv = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)  # ✅ ex: 1747,85
+    valor_iss  = fmt_decimal(valor_iss_raw, casas=2)                    # ✅ ex: 50,68
+    aliquota   = fmt_decimal(aliquota_raw, casas=2)                     # ✅ ex: 2,90
 
     try:
         s = str(valor_iss_raw).strip()
@@ -396,8 +401,8 @@ def reg_1020(row) -> str:
     if v_iss == 0.0 and iss_retido != "S":
         return ""
 
-    # ✅ ISS Retido  → Campo 6 (Valor Imposto) | Campo 8 vazio
-    # ✅ ISS Normal  → Campo 6 vazio            | Campo 8 (Valor Outras)
+    # ✅ ISS Retido → Campo 6 (Valor Imposto) | Campo 8 vazio
+    # ✅ ISS Normal → Campo 6 vazio            | Campo 8 (Valor Outras)
     if iss_retido == "S":
         campo6 = valor_iss
         campo8 = ""
@@ -409,14 +414,14 @@ def reg_1020(row) -> str:
         "1020",     # 1
         cod_iss,    # 2
         "",         # 3
-        valor_serv, # 4  Base de cálculo
-        aliquota,   # 5  Alíquota
+        valor_serv, # 4  ✅ Base de cálculo  ex: 1747,85
+        aliquota,   # 5  ✅ Alíquota         ex: 2,90
         campo6,     # 6  ✅ Valor Imposto (só Retido)
-        "",         # 7  Valor Isentas
+        "",         # 7
         campo8,     # 8  ✅ Valor Outras (só Normal)
         "",         # 9
         "",         # 10
-        valor_serv, # 11 Valor Contábil
+        valor_serv, # 11 ✅ Valor Contábil   ex: 1747,85
         "",         # 12
         "",         # 13
         "",         # 14
@@ -534,7 +539,7 @@ with st.sidebar:
         "**ISS Normal** — Cód.3  → Campo 8 (Valor Outras)\n\n"
         "**Fornecedor** — CNPJ (nacional) / vazio (exterior)\n\n"
         "**UF** — EX (exterior) / UF real (nacional)\n\n"
-        "**Decimais** — Domínio: 1747,85 → 174785"
+        "**Decimais** — Domínio: 1.747,85 → 1747,85 ✅"
     )
 
 with st.spinner("🔄 Carregando tabelas de referência do GitHub..."):
@@ -581,12 +586,12 @@ if file_nfts:
         st.warning("Nenhuma nota com Tipo de Registro = 4 encontrada no CSV.")
         st.stop()
 
-    # ✅ ALERTA DE DUPLICATAS — antes de qualquer processamento
+    # ✅ ALERTA DE DUPLICATAS
     df_dup = detecta_duplicatas(df_notas)
     if not df_dup.empty:
         st.error(
-            f"⚠️ **{len(df_dup)} nota(s) com número de documento duplicado para o mesmo fornecedor!**\n\n"
-            "Verifique as notas abaixo antes de importar."
+            f"⚠️ **{len(df_dup)} nota(s) com número de documento duplicado "
+            f"para o mesmo fornecedor!** Verifique antes de importar."
         )
         st.dataframe(
             df_dup.style.apply(
@@ -762,43 +767,35 @@ if file_nfts:
         ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"]),
         use_container_width=True, hide_index=True)
 
-        st.markdown("### Formato de decimais — Regra oficial Domínio")
+        st.markdown("### Formato de decimais — Padrão Domínio ✅ CORRIGIDO")
         st.dataframe(pd.DataFrame([
-            ["1.747,85", "ponto=milhar, vírgula=decimal", "174785"],
-            ["1747.85",  "ponto=decimal",                 "174785"],
-            ["1747,85",  "vírgula=decimal",               "174785"],
-            ["2,90",     "alíquota ISS",                  "290"],
-            ["50,68",    "valor ISS",                     "5068"],
+            ["1.747,85", "ponto=milhar, vírgula=decimal", "1747,85 ✅"],
+            ["963,02",   "vírgula=decimal",               "963,02  ✅"],
+            ["2,9",      "alíquota ISS",                  "2,90    ✅"],
+            ["50,68",    "valor ISS",                     "50,68   ✅"],
         ], columns=["Valor no CSV", "Interpretação", "Resultado no arquivo"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Regra ISS — Registro 1020")
         st.dataframe(pd.DataFrame([
             ["ISS Retido", "Cód.18", "valor_iss", '""',        "Campo 6 = Valor do Imposto"],
-            ["ISS Normal", "Cód. 3", '""',         "valor_iss", "Campo 8 = Valor de Outras ✅"],
+            ["ISS Normal", "Cód. 3", '""',         "valor_iss", "Campo 8 = Valor de Outras"],
         ], columns=["Situação", "Cód ISS", "Campo 6", "Campo 8", "Observação"]),
-        use_container_width=True, hide_index=True)
-
-        st.markdown("### Alerta de duplicatas")
-        st.dataframe(pd.DataFrame([
-            ["Mesmo Fornecedor + Mesmo Nº Documento", "🔴 Alerta vermelho no topo da página"],
-            ["Acumulador não mapeado",                "🔴 Linha vermelha no preview"],
-            ["Acumulador não mapeado",                "⚠️ Aviso na aba Arquivo Gerado"],
-        ], columns=["Condição", "Ação"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Todas as correções aplicadas")
         st.dataframe(pd.DataFrame([
-            ["0020", "4",  "Nome reduzido",     '""', "razao[:40]", "❌ Obrigatório"],
-            ["0020", "22", "Agropecuário",       '""', '"N"',        "⚠️ Obrigatório"],
-            ["0020", "24", "Regime de apuração", '""', '"N"',        "⚠️ Obrigatório"],
-            ["0020", "25", "Contribuinte ICMS",  '""', '"N"',        "⚠️ Obrigatório"],
-            ["0020", "31", "Contribuinte CPRB",  '""', '"N"',        "⚠️ Obrigatório"],
-            ["1000", "39", "Valor produtos",     '""', "valor",      "⚠️ = Campo 13"],
-            ["1020", "6",  "Valor Imposto",  "sempre", "só Retido",  "✅ ISS Retido"],
-            ["1020", "8",  "Valor Outras",      '""', "valor_iss",   "✅ ISS Normal"],
-            ["—",    "—",  "Duplicatas",        "—",  "Alerta 🔴",   "✅ Novo"],
-        ], columns=["Registro", "Campo", "Nome", "Antes", "Depois", "Motivo"]),
+            ["fmt_decimal", "—",  "Formato decimal",    "174785",  "1747,85 ✅"],
+            ["0020",        "4",  "Nome reduzido",       '""',      "razao[:40]"],
+            ["0020",        "22", "Agropecuário",        '""',      '"N"'],
+            ["0020",        "24", "Regime de apuração",  '""',      '"N"'],
+            ["0020",        "25", "Contribuinte ICMS",   '""',      '"N"'],
+            ["0020",        "31", "Contribuinte CPRB",   '""',      '"N"'],
+            ["1000",        "39", "Valor produtos",      '""',      "= campo 13"],
+            ["1020",        "6",  "Valor Imposto",       "sempre",  "só Retido"],
+            ["1020",        "8",  "Valor Outras",        '""',      "só Normal"],
+            ["—",           "—",  "Duplicatas",          "—",       "Alerta 🔴"],
+        ], columns=["Onde", "Campo", "Nome", "Antes", "Depois"]),
         use_container_width=True, hide_index=True)
 
 else:
