@@ -32,29 +32,15 @@ def safe(row, col, default=""):
     return str(val).strip()
 
 def fmt_decimal(value, casas=2):
-    """
-    Converte valor para formato Domínio Sistemas.
-    O Domínio aceita VÍRGULA como separador decimal (confirmado no arquivo exemplo oficial).
-    Exemplos:
-      1.747,85  → 1747,85   (ponto=milhar, vírgula=decimal) ✅
-      963,02    → 963,02    (vírgula=decimal)               ✅
-      2,9       → 2,90      (alíquota ISS)                  ✅
-      50,68     → 50,68     (ISS)                           ✅
-      0         → 0,00                                      ✅
-    """
     try:
         s = str(value).strip()
         if not s or s in ("nan", ""):
             return "0"
-        # ponto E vírgula → ponto=milhar, vírgula=decimal
         if "," in s and "." in s:
             s = s.replace(".", "").replace(",", ".")
-        # só vírgula → vírgula=decimal
         elif "," in s:
             s = s.replace(",", ".")
-        # só ponto ou inteiro → não mexe
         v = float(s)
-        # ✅ Retorna com vírgula decimal, padrão Domínio Sistemas
         return f"{v:.{casas}f}".replace(".", ",")
     except Exception:
         return "0"
@@ -212,7 +198,7 @@ def reg_0020(row, lookup_pais: dict) -> str:
     ind_num     = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     fornecedor  = determina_fornecedor(row)
     razao       = safe(row, "Razão Social do Prestador")[:150]
-    apelido     = razao[:40]   # ✅ Nome reduzido obrigatório
+    apelido     = razao[:40]
     endereco    = safe(row, "Endereço do Prestador")
     numero_end  = limpa_numero(safe(row, "Número do Endereço do Prestador"))
     complemento = safe(row, "Complemento do Endereço do Prestador")
@@ -226,7 +212,7 @@ def reg_0020(row, lookup_pais: dict) -> str:
         "0020",      # 1
         fornecedor,  # 2
         razao,       # 3
-        apelido,     # 4  ✅ Nome reduzido = razão[:40]
+        apelido,     # 4
         endereco,    # 5
         numero_end,  # 6
         complemento, # 7
@@ -244,16 +230,16 @@ def reg_0020(row, lookup_pais: dict) -> str:
         "",          # 19
         "",          # 20
         "",          # 21
-        "N",         # 22 ✅ Agropecuário
+        "N",         # 22 - Agropecuário
         "",          # 23
-        "N",         # 24 ✅ Regime de apuração
-        "N",         # 25 ✅ Contribuinte ICMS
+        "N",         # 24 - Regime de apuração
+        "N",         # 25 - Contribuinte ICMS
         "",          # 26
         "",          # 27
         "",          # 28
         email,       # 29
         "",          # 30
-        "N",         # 31 ✅ Contribuinte CPRB
+        "N",         # 31 - Contribuinte CPRB
         "",          # 32
         "",          # 33
     ]
@@ -270,10 +256,13 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
     if serie in ("-", "nan", ""):
         serie = ""
 
-    dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))
-    dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços"))
-    valor      = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)  # ✅ ex: 1747,85
-    cod_iss    = determina_cod_iss(row)
+    # ✅ Ambos os campos de data usam "Data da Prestação de Serviços"
+    dt_prestacao = fmt_date(safe(row, "Data da Prestação de Serviços"))
+    dt_campo11   = dt_prestacao  # Campo 11 - Data da entrada
+    dt_campo12   = dt_prestacao  # Campo 12 - Data emissão
+
+    valor   = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
+    cod_iss = determina_cod_iss(row)
 
     campos = [
         "1000",      # 1
@@ -286,9 +275,9 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         num_doc,     # 8
         serie,       # 9
         "",          # 10
-        dt_campo11,  # 11
-        dt_campo12,  # 12
-        valor,       # 13 ✅ Valor contábil com vírgula  ex: 1747,85
+        dt_campo11,  # 11 ✅ Data da Prestação de Serviços
+        dt_campo12,  # 12 ✅ Data da Prestação de Serviços
+        valor,       # 13
         "",          # 14
         "",          # 15
         "",          # 16
@@ -314,7 +303,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 36
         "",          # 37
         "",          # 38
-        valor,       # 39 ✅ Valor produtos = Valor contábil
+        valor,       # 39 - Valor produtos = Valor contábil
         "",          # 40
         "",          # 41
         "",          # 42
@@ -379,48 +368,36 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
     return monta_linha(campos)
 
 def reg_1020(row) -> str:
-    """
-    Regras de preenchimento do 1020:
-
-    ISS Retido (S) → Cód.18
-        Campo 6 (Valor Imposto) = valor_iss  ✅
-        Campo 8 (Valor Outras)  = ""
-
-    ISS Normal (N) → Cód.3  ✅ SEMPRE gera o registro, mesmo com ISS = 0
-        Campo 6 (Valor Imposto) = ""
-        Campo 8 (Valor Outras)  = valor dos serviços  ✅
-    """
     iss_retido    = safe(row, "ISS Retido").upper().strip()
     valor_iss_raw = safe(row, "Valor ISS")
     aliquota_raw  = safe(row, "Alíquota")
     cod_iss       = determina_cod_iss(row)
-
-    valor_serv = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
-    valor_iss  = fmt_decimal(valor_iss_raw, casas=2)
-    aliquota   = fmt_decimal(aliquota_raw, casas=2)
+    valor_serv    = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
 
     if iss_retido == "S":
-        # ✅ ISS Retido → Campo 6 = valor ISS retido | Campo 8 vazio
-        campo6 = valor_iss
-        campo8 = ""
+        # ✅ ISS Retido → alíquota do CSV | Campo 6 = valor ISS | Campo 8 vazio
+        aliquota  = fmt_decimal(aliquota_raw, casas=2)
+        valor_iss = fmt_decimal(valor_iss_raw, casas=2)
+        campo6    = valor_iss
+        campo8    = ""
     else:
-        # ✅ ISS Normal → Campo 6 vazio | Campo 8 = valor dos serviços (Outras)
-        # SEMPRE gera o registro 1020, mesmo quando ISS = 0
-        campo6 = ""
-        campo8 = valor_serv
+        # ✅ ISS Normal → alíquota ZERADA | Campo 6 vazio | Campo 8 = valor serviços
+        aliquota = "0,00"
+        campo6   = ""
+        campo8   = valor_serv
 
     campos = [
         "1020",     # 1
-        cod_iss,    # 2  18=Retido / 3=Normal
-        "",         # 3  Percentual redução base cálculo
-        valor_serv, # 4  ✅ Base de cálculo  ex: 1747,85
-        aliquota,   # 5  ✅ Alíquota         ex: 2,90
+        cod_iss,    # 2  - 18=Retido / 3=Normal
+        "",         # 3
+        valor_serv, # 4  - Base de cálculo
+        aliquota,   # 5  ✅ Alíquota: CSV se Retido | 0,00 se Normal
         campo6,     # 6  ✅ Valor Imposto (só ISS Retido)
-        "",         # 7  Valor Isentas
+        "",         # 7
         campo8,     # 8  ✅ Valor Outras (ISS Normal = valor dos serviços)
         "",         # 9
         "",         # 10
-        valor_serv, # 11 ✅ Valor Contábil   ex: 1747,85
+        valor_serv, # 11 - Valor Contábil
         "",         # 12
         "",         # 13
         "",         # 14
@@ -467,8 +444,11 @@ def converte_nfts(
         valor      = fmt_decimal(valor_raw, casas=2)
         valor_iss  = fmt_decimal(safe(row, "Valor ISS"), casas=2)
         iss_retido = safe(row, "ISS Retido").upper().strip()
-        dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))
-        dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços"))
+
+        # ✅ Ambas as datas do preview também usam Data da Prestação de Serviços
+        dt_prestacao = fmt_date(safe(row, "Data da Prestação de Serviços"))
+        dt_campo11   = dt_prestacao
+        dt_campo12   = dt_prestacao
 
         if incluir_0020:
             chave_forn = fornecedor if fornecedor else razao
@@ -479,7 +459,6 @@ def converte_nfts(
         linhas.append(reg_1000(row, lookup_acum, lookup_pais))
 
         if incluir_1020:
-            # ✅ SEMPRE gera 1020 (ISS Normal também é obrigatório)
             linhas.append(reg_1020(row))
 
         if incluir_1150:
@@ -533,10 +512,11 @@ with st.sidebar:
         "**Especie** — 39 para todas as notas\n\n"
         "**CFOP** — 1933 (SP) / 2933 (outros/EXT)\n\n"
         "**Acumulador** — 2551 (exterior) / lookup PAULISTANA\n\n"
-        "**ISS Retido** — Cód.18 → Campo 6 (Valor Imposto)\n\n"
-        "**ISS Normal** — Cód.3  → Campo 8 (Valor Outras) = Valor Serviços\n\n"
+        "**ISS Retido** — Cód.18 → Campo 6 | Alíquota do CSV\n\n"
+        "**ISS Normal** — Cód.3  → Campo 8 | Alíquota = 0,00\n\n"
         "**Fornecedor** — CNPJ (nacional) / vazio (exterior)\n\n"
         "**UF** — EX (exterior) / UF real (nacional)\n\n"
+        "**Datas C11/C12** — Data da Prestação de Serviços ✅\n\n"
         "**Decimais** — Domínio: 1.747,85 → 1747,85 ✅"
     )
 
@@ -584,7 +564,7 @@ if file_nfts:
         st.warning("Nenhuma nota com Tipo de Registro = 4 encontrada no CSV.")
         st.stop()
 
-    # ✅ ALERTA DE DUPLICATAS
+    # ✅ Alerta de duplicatas
     df_dup = detecta_duplicatas(df_notas)
     if not df_dup.empty:
         st.error(
@@ -652,7 +632,7 @@ if file_nfts:
                 "🟢 Verde = ISS Retido (Cód.18) → Campo 6</span>", unsafe_allow_html=True)
             col_l2.markdown(
                 "<span style='background:#fff3cd;padding:2px 8px;border-radius:4px'>"
-                "🟡 Amarelo = ISS Normal (Cód.3) → Campo 8</span>", unsafe_allow_html=True)
+                "🟡 Amarelo = ISS Normal (Cód.3) → Campo 8 | Alíquota 0,00</span>", unsafe_allow_html=True)
             col_l3.markdown(
                 "<span style='background:#f8d7da;padding:2px 8px;border-radius:4px'>"
                 "🔴 Vermelho = Acumulador não mapeado</span>", unsafe_allow_html=True)
@@ -698,6 +678,7 @@ if file_nfts:
                 val_bruto = safe(row, "Valor dos Serviços")
                 iss_bruto = safe(row, "Valor ISS")
                 ali_bruto = safe(row, "Alíquota")
+                iss_ret   = safe(row, "ISS Retido").upper().strip()
                 st.markdown(f"**NFTS {nfts}**")
                 debug_data = {
                     "Campo": [
@@ -712,7 +693,7 @@ if file_nfts:
                         "Valor ISS (bruto CSV)",
                         "Valor ISS (Domínio)",
                         "Alíquota (bruto CSV)",
-                        "Alíquota (Domínio)",
+                        "Alíquota (1020 campo 5)",
                         "→ Especie",
                         "→ CFOP",
                         "→ Acumulador",
@@ -720,8 +701,8 @@ if file_nfts:
                         "→ UF",
                         "→ Cód ISS",
                         "→ Cód País",
-                        "→ C11 Data entrada (Emissão NFTS)",
-                        "→ C12 Data emissão (Prestação Serviço)",
+                        "→ C11 Data entrada",
+                        "→ C12 Data emissão",
                     ],
                     "Valor": [
                         safe(row, "Indicador de CPF/CNPJ do Prestador"),
@@ -729,13 +710,13 @@ if file_nfts:
                         safe(row, "Razão Social do Prestador"),
                         safe(row, "UF do Prestador"),
                         limpa_numero(safe(row, "Código do Serviço Prestado na NFTS")),
-                        safe(row, "ISS Retido"),
+                        iss_ret,
                         val_bruto,
                         fmt_decimal(val_bruto, casas=2),
                         iss_bruto,
                         fmt_decimal(iss_bruto, casas=2),
                         ali_bruto,
-                        fmt_decimal(ali_bruto, casas=2),
+                        fmt_decimal(ali_bruto, casas=2) if iss_ret == "S" else "0,00 (forçado)",
                         determina_especie(row),
                         determina_cfop(row),
                         determina_acumulador(row, lookup_acum),
@@ -743,8 +724,8 @@ if file_nfts:
                         determina_uf(row),
                         determina_cod_iss(row),
                         determina_cod_pais(row, lookup_pais),
-                        fmt_date(safe(row, "Data Hora Emissão NFTS")),
-                        fmt_date(safe(row, "Data da Prestação de Serviços")),
+                        fmt_date(safe(row, "Data da Prestação de Serviços")),  # ✅
+                        fmt_date(safe(row, "Data da Prestação de Serviços")),  # ✅
                     ],
                 }
                 st.dataframe(
@@ -769,16 +750,23 @@ if file_nfts:
         st.dataframe(pd.DataFrame([
             ["1.747,85", "ponto=milhar, vírgula=decimal", "1747,85 ✅"],
             ["963,02",   "vírgula=decimal",               "963,02  ✅"],
-            ["2,9",      "alíquota ISS",                  "2,90    ✅"],
-            ["50,68",    "valor ISS",                     "50,68   ✅"],
+            ["2,9",      "alíquota ISS Retido",           "2,90    ✅"],
+            ["0",        "alíquota ISS Normal",           "0,00    ✅"],
         ], columns=["Valor no CSV", "Interpretação", "Resultado no arquivo"]),
+        use_container_width=True, hide_index=True)
+
+        st.markdown("### Datas — Registro 1000 ✅")
+        st.dataframe(pd.DataFrame([
+            ["Campo 11", "Data da entrada", "Data da Prestação de Serviços", "✅"],
+            ["Campo 12", "Data emissão",    "Data da Prestação de Serviços", "✅"],
+        ], columns=["Campo", "Nome Domínio", "Fonte CSV", "Status"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Regra ISS — Registro 1020 ✅")
         st.dataframe(pd.DataFrame([
-            ["ISS Retido (S)", "Cód.18", "valor_iss",   '""',        "Campo 6 = Valor do Imposto"],
-            ["ISS Normal (N)", "Cód. 3", '""',           "valor_serv","Campo 8 = Valor de Outras = Valor Serviços"],
-        ], columns=["Situação", "Cód ISS", "Campo 6", "Campo 8", "Observação"]),
+            ["ISS Retido (S)", "Cód.18", "do CSV",  "valor_iss",  '""',       "Campo 6 = Valor Imposto"],
+            ["ISS Normal (N)", "Cód. 3", "0,00 ✅", '""',          "valor_serv","Campo 8 = Valor Outras"],
+        ], columns=["Situação", "Cód ISS", "Alíquota C5", "Campo 6", "Campo 8", "Observação"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Todas as correções aplicadas")
@@ -789,10 +777,13 @@ if file_nfts:
             ["0020",        "24", "Regime de apuração",  '""',            '"N" ✅'],
             ["0020",        "25", "Contribuinte ICMS",   '""',            '"N" ✅'],
             ["0020",        "31", "Contribuinte CPRB",   '""',            '"N" ✅'],
+            ["1000",        "11", "Data entrada",        "Emissão NFTS",  "Prestação Serviços ✅"],
+            ["1000",        "12", "Data emissão",        "Prestação Serv","Prestação Serviços ✅"],
             ["1000",        "39", "Valor produtos",      '""',            "= campo 13 ✅"],
+            ["1020",        "5",  "Alíquota ISS Normal", "do CSV",        "0,00 ✅"],
             ["1020",        "6",  "Valor Imposto",       "sempre",        "só ISS Retido ✅"],
             ["1020",        "8",  "Valor Outras",        '""',            "ISS Normal = valor_serv ✅"],
-            ["1020",        "—",  "Geração",             "só se ISS > 0", "SEMPRE gerado ✅"],
+            ["1020",        "—",  "Geração",             "condicional",   "SEMPRE gerado ✅"],
             ["—",           "—",  "Duplicatas",          "—",             "Alerta 🔴 ✅"],
         ], columns=["Onde", "Campo", "Nome", "Antes", "Depois"]),
         use_container_width=True, hide_index=True)
