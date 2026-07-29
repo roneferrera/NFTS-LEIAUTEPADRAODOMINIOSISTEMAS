@@ -7,14 +7,12 @@ from datetime import datetime
 # ─────────────────────────────────────────────
 # CONSTANTES
 # ─────────────────────────────────────────────
-ESPECIE_UNICA = "39"  # Especie 39 para todas as notas (nacional e exterior)
-
+ESPECIE_UNICA       = "39"   # Especie 39 para todas as notas
 ACUMULADOR_EXTERIOR = "2551"
 CFOP_SP             = "1933"
 CFOP_FORA           = "2933"
-
-COD_ISS_RETIDO  = "18"
-COD_ISS_NORMAL  = "3"
+COD_ISS_RETIDO      = "18"
+COD_ISS_NORMAL      = "3"
 
 # ─────────────────────────────────────────────
 # HELPERS
@@ -27,7 +25,8 @@ def safe(row, col, default=""):
 
 def fmt_decimal(value, decimals=2):
     try:
-        v = float(str(value).replace(".", "").replace(",", "."))
+        s = str(value).strip().replace(".", "").replace(",", ".")
+        v = float(s)
         return f"{v:.{decimals}f}"
     except Exception:
         return f"0.{'0'*decimals}"
@@ -57,32 +56,44 @@ def limpa_numero(value):
         return str(value).strip()
 
 # ─────────────────────────────────────────────
-# CARREGA ACUMULADORES
+# CARREGA ACUMULADORES DO EXCEL
 # ─────────────────────────────────────────────
 @st.cache_data
 def carrega_acumuladores(file_bytes):
-    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name="Acumuladores", dtype=str)
+    df = pd.read_excel(
+        io.BytesIO(file_bytes),
+        sheet_name="Acumuladores",
+        dtype=str
+    )
     df.columns = [c.strip() for c in df.columns]
     lookup = {}
     for _, row in df.iterrows():
-        paulistana = str(row.get("PAULISTANA", "")).strip().replace(".0", "").strip()
-        acumulador = str(row.get("Codigo ACUMULADOR", "")).strip().replace(".0", "").strip()
+        paulistana = str(row.get("PAULISTANA", "")).strip()
+        # Remove .0 caso venha como float string
+        paulistana = re.sub(r"\.0$", "", paulistana).strip()
+        acumulador = str(row.get("Codigo ACUMULADOR", "")).strip()
+        acumulador = re.sub(r"\.0$", "", acumulador).strip()
         if paulistana and paulistana not in ("", "nan"):
             lookup[paulistana] = acumulador
     return lookup
 
 # ─────────────────────────────────────────────
-# CARREGA PAÍSES
+# CARREGA PAÍSES DO EXCEL
 # ─────────────────────────────────────────────
 @st.cache_data
 def carrega_paises(file_bytes):
-    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name="RELAÇÃO DE PAÍSES", dtype=str)
+    df = pd.read_excel(
+        io.BytesIO(file_bytes),
+        sheet_name="RELAÇÃO DE PAÍSES",
+        dtype=str
+    )
     df.columns = [c.strip() for c in df.columns]
     lookup = {}
     for _, row in df.iterrows():
         nome   = str(row.get("Nome", "")).strip().upper()
-        codigo = str(row.get("Código", "")).strip().replace(".0", "").strip()
-        if nome and codigo:
+        codigo = str(row.get("Código", "")).strip()
+        codigo = re.sub(r"\.0$", "", codigo).strip()
+        if nome and codigo and nome != "NAN":
             lookup[nome] = codigo
     return lookup
 
@@ -90,50 +101,62 @@ def carrega_paises(file_bytes):
 # REGRAS DE NEGÓCIO
 # ─────────────────────────────────────────────
 def determina_especie(_row) -> str:
-    """Especie 39 para todas as notas (nacional e exterior)."""
+    """Especie 39 para todas as notas."""
     return ESPECIE_UNICA
 
 def determina_cfop(row) -> str:
     ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    uf  = safe(row, "UF do Prestador").upper()
-    if ind == "3":
+    # Indicador pode vir como "3.0" ou "3"
+    ind_num = re.sub(r"\.0$", "", ind).strip()
+    if ind_num == "3":
         return CFOP_FORA
+    uf = safe(row, "UF do Prestador").upper().strip()
     return CFOP_SP if uf == "SP" else CFOP_FORA
 
 def determina_acumulador(row, lookup_acum: dict) -> str:
     ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    if ind == "3":
+    ind_num = re.sub(r"\.0$", "", ind).strip()
+    if ind_num == "3":
         return ACUMULADOR_EXTERIOR
-    paulistana = limpa_numero(safe(row, "Código do Serviço Prestado na NFTS"))
+    # Pega o código PAULISTANA e normaliza
+    paulistana_raw = safe(row, "Código do Serviço Prestado na NFTS")
+    paulistana = limpa_numero(paulistana_raw)
     acum = lookup_acum.get(paulistana, "")
     if not acum:
         return f"AVISO: PAULISTANA {paulistana} NAO MAPEADA"
     return acum
 
 def determina_cod_iss(row) -> str:
-    retido = safe(row, "ISS Retido").upper()
+    retido = safe(row, "ISS Retido").upper().strip()
     return COD_ISS_RETIDO if retido == "S" else COD_ISS_NORMAL
 
 def determina_fornecedor(row) -> str:
     ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    if ind == "3":
+    ind_num = re.sub(r"\.0$", "", ind).strip()
+    if ind_num == "3":
         return ""
     return limpa_cnpj(safe(row, "CPF/CNPJ do Prestador"))
 
 def determina_uf(row) -> str:
     ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    if ind == "3":
+    ind_num = re.sub(r"\.0$", "", ind).strip()
+    if ind_num == "3":
         return "EX"
-    return safe(row, "UF do Prestador")
+    return safe(row, "UF do Prestador").strip()
 
 def determina_cod_pais(row, lookup_pais: dict) -> str:
     ind = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    if ind != "3":
+    ind_num = re.sub(r"\.0$", "", ind).strip()
+    if ind_num != "3":
         return ""
-    # Tenjin INC → ESTADOS UNIDOS (76)
-    cidade = safe(row, "Bairro do Prestador").upper()
-    # Tenta pelo endereço (Sacramento = EUA)
-    # Fallback: retorna 76 (ESTADOS UNIDOS) para exterior sem país definido
+    # Tenta identificar pelo bairro (Sacramento = EUA)
+    bairro = safe(row, "Bairro do Prestador").upper().strip()
+    cidade = safe(row, "Cidade do Prestador").upper().strip()
+    endereco = safe(row, "Endereço do Prestador").upper().strip()
+    # Heurística: Sacramento / North Street → ESTADOS UNIDOS
+    if any(x in bairro + cidade + endereco for x in ["SACRAMENTO", "NORTH STREET", "USA", "EUA"]):
+        return lookup_pais.get("ESTADOS UNIDOS", "76")
+    # Fallback: retorna 76 (ESTADOS UNIDOS) se não identificado
     return lookup_pais.get("ESTADOS UNIDOS", "76")
 
 # ─────────────────────────────────────────────
@@ -141,59 +164,58 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
 # ─────────────────────────────────────────────
 def reg_0000(cnpj_empresa: str) -> str:
     campos = [
-        "0000",          # 1 - Identificação do registro
-        cnpj_empresa,    # 2 - CNPJ da empresa
+        "0000",        # 1 - Identificação do registro
+        cnpj_empresa,  # 2 - CNPJ da empresa
     ]
     return "|".join(campos)
 
 def reg_0020(row, lookup_pais: dict) -> str:
-    ind        = safe(row, "Indicador de CPF/CNPJ do Prestador")
+    ind_num    = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     fornecedor = determina_fornecedor(row)
     razao      = safe(row, "Razão Social do Prestador")[:150]
     endereco   = safe(row, "Endereço do Prestador")
-    numero     = limpa_numero(safe(row, "Número do Endereço do Prestador"))
+    numero_end = limpa_numero(safe(row, "Número do Endereço do Prestador"))
     complemento= safe(row, "Complemento do Endereço do Prestador")
     bairro     = safe(row, "Bairro do Prestador")
-    cidade     = safe(row, "Cidade do Prestador")
     uf         = determina_uf(row)
     cep        = re.sub(r"\D", "", safe(row, "CEP do Prestador"))
-    cod_pais   = determina_cod_pais(row, lookup_pais) if ind == "3" else ""
+    cod_pais   = determina_cod_pais(row, lookup_pais) if ind_num == "3" else ""
     email      = safe(row, "Email do Prestador")
 
     campos = [
-        "0020",      # 1
-        fornecedor,  # 2 - CNPJ/CPF (vazio para exterior)
-        razao,       # 3
-        "",          # 4 - Apelido
-        endereco,    # 5
-        numero,      # 6
-        complemento, # 7
-        bairro,      # 8
-        "",          # 9 - Código município
-        uf,          # 10
-        cod_pais,    # 11 - Código país (só exterior)
-        cep,         # 12
-        "",          # 13 - IE
-        "",          # 14 - IM
-        "",          # 15 - Suframa
-        "",          # 16 - DDD
-        "",          # 17 - Telefone
-        "",          # 18 - FAX
-        "",          # 19 - Data cadastro
-        "",          # 20 - Conta contábil
-        "",          # 21 - Conta contábil cliente
-        "",          # 22 - Agropecuário
-        "",          # 23 - Natureza jurídica
-        "",          # 24 - Regime apuração
-        "",          # 25 - Contribuinte ICMS
-        "",          # 26 - Alíquota ICMS
-        "",          # 27 - Categoria estabelecimento
-        "",          # 28 - IE ST
-        email,       # 29
-        "",          # 30 - Interdependência
-        "",          # 31 - CPRB
-        "",          # 32 - Processo adm/judicial
-        "",          # 33 - Tipo inscrição
+        "0020",       # 1  - Identificação do registro
+        fornecedor,   # 2  - CNPJ/CPF (vazio para exterior)
+        razao,        # 3  - Razão Social
+        "",           # 4  - Apelido
+        endereco,     # 5  - Endereço
+        numero_end,   # 6  - Número
+        complemento,  # 7  - Complemento
+        bairro,       # 8  - Bairro
+        "",           # 9  - Código município
+        uf,           # 10 - UF (EX para exterior)
+        cod_pais,     # 11 - Código país (só exterior)
+        cep,          # 12 - CEP
+        "",           # 13 - IE
+        "",           # 14 - IM
+        "",           # 15 - Suframa
+        "",           # 16 - DDD
+        "",           # 17 - Telefone
+        "",           # 18 - FAX
+        "",           # 19 - Data cadastro
+        "",           # 20 - Conta contábil
+        "",           # 21 - Conta contábil cliente
+        "",           # 22 - Agropecuário
+        "",           # 23 - Natureza jurídica
+        "",           # 24 - Regime apuração
+        "",           # 25 - Contribuinte ICMS
+        "",           # 26 - Alíquota ICMS
+        "",           # 27 - Categoria estabelecimento
+        "",           # 28 - IE ST
+        email,        # 29 - Email
+        "",           # 30 - Interdependência
+        "",           # 31 - CPRB
+        "",           # 32 - Processo adm/judicial
+        "",           # 33 - Tipo inscrição
     ]
     return "|".join(campos)
 
@@ -213,8 +235,8 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
 
     campos = [
         "1000",      # 1  - Identificação do registro
-        especie,     # 2  - Código da espécie (39 para todas as notas)
-        fornecedor,  # 3  - Inscrição fornecedor (CNPJ ou vazio para exterior)
+        especie,     # 2  - Código da espécie (39 para todas)
+        fornecedor,  # 3  - Inscrição fornecedor
         "",          # 4  - Código exclusão DIEF
         acumulador,  # 5  - Código do acumulador
         cfop,        # 6  - CFOP
@@ -229,9 +251,9 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 15 - Observação
         "",          # 16 - Modalidade frete
         "",          # 17 - Emitente NF
-        "",          # 18 - CFOP estendido (SE)
-        "",          # 19 - Código transferência crédito (RS)
-        cod_iss,     # 20 - Código recolhimento ISS retido
+        "",          # 18 - CFOP estendido SE
+        "",          # 19 - Código transferência crédito RS
+        cod_iss,     # 20 - Código recolhimento ISS
         "",          # 21 - Código recolhimento IRRF
         "",          # 22 - Código observação
         "",          # 23 - Data visto MG
@@ -260,7 +282,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 46 - Código operação e prestação
         "",          # 47 - Valor dedução receita
         "",          # 48 - Competência
-        "",          # 49 - Operação (PA)
+        "",          # 49 - Operação PA
         "",          # 50 - Número parecer fiscal
         "",          # 51 - Data parecer fiscal
         "",          # 52 - Número DI
@@ -294,7 +316,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 80 - Número processo/ato
         "",          # 81 - Origem processo
         "",          # 82 - Data escrituração
-        "",          # 83 - CFPS (DF)
+        "",          # 83 - CFPS DF
         "",          # 84 - Natureza receita PIS/COFINS
         "",          # 85 - CST IPI
         "",          # 86 - Lançamentos SCP
@@ -305,7 +327,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 91 - ICMS ST
         "",          # 92 - Classif. serviços EFD-Reinf tipo
         "",          # 93 - Classif. serviços EFD-Reinf indicativo
-        "",          # 94 - Número doc arrecadação (RS)
+        "",          # 94 - Número doc arrecadação RS
         "",          # 95 - Tipo título
         "",          # 96 - Identificação
         "",          # 97 - ICMS Desonerado
@@ -314,25 +336,22 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
     return "|".join(campos)
 
 def reg_1020(row) -> str:
-    """Registro 1020 - Impostos da nota (ISS)."""
-    iss_retido = safe(row, "ISS Retido").upper()
-    valor_iss  = fmt_decimal(safe(row, "Valor ISS"))
-    aliquota   = fmt_decimal(safe(row, "Alíquota"))
-    valor_serv = fmt_decimal(safe(row, "Valor dos Serviços"))
-    cod_iss    = determina_cod_iss(row)
+    """Registro 1020 - ISS. Só gera se houver ISS ou ISS Retido=S."""
+    iss_retido = safe(row, "ISS Retido").upper().strip()
+    valor_iss_raw = safe(row, "Valor ISS")
+    aliquota_raw  = safe(row, "Alíquota")
+    valor_serv    = fmt_decimal(safe(row, "Valor dos Serviços"))
+    valor_iss     = fmt_decimal(valor_iss_raw)
+    aliquota      = fmt_decimal(aliquota_raw)
+    cod_iss       = determina_cod_iss(row)
 
-    # Só gera 1020 se houver ISS
+    # Verifica se há ISS a lançar
     try:
-        v = float(str(safe(row, "Valor ISS")).replace(",", ".").replace(".", "").replace(",", "."))
+        v_iss = float(str(valor_iss_raw).strip().replace(".", "").replace(",", "."))
     except Exception:
-        v = 0.0
-    # Reconverte corretamente
-    try:
-        v = float(str(safe(row, "Valor ISS")).replace(".", "").replace(",", "."))
-    except Exception:
-        v = 0.0
+        v_iss = 0.0
 
-    if v == 0.0 and iss_retido != "S":
+    if v_iss == 0.0 and iss_retido != "S":
         return ""
 
     campos = [
@@ -348,8 +367,8 @@ def reg_1020(row) -> str:
         "",          # 10 - Valor ST
         valor_serv,  # 11 - Valor contábil
         "",          # 12 - Código recolhimento
-        "",          # 13 - Valor não tributadas (GO)
-        "",          # 14 - Valor parcela reduzida (GO)
+        "",          # 13 - Valor não tributadas GO
+        "",          # 14 - Valor parcela reduzida GO
         "",          # 15 - Alíq. Interestadual
         "",          # 16 - Nat. rend.
         "",          # 17 - Tipo dedução
@@ -359,32 +378,30 @@ def reg_1020(row) -> str:
     return "|".join(campos)
 
 def reg_1150(row) -> str:
-    """Registro 1150 - IVA/IBS (deixado em branco por ora)."""
-    campos = [
-        "1150",  # 1
+    """Registro 1150 - IVA/IBS."""
+    return "|".join([
+        "1150",  # 1 - Identificação do registro
         "",      # 2 - IBS cClassTrib
         "",      # 3 - IBS Base cálculo
         "",      # 4 - IBS Alíquota
         "",      # 5 - IBS Valor
-    ]
-    return "|".join(campos)
+    ])
 
 def reg_1151(row) -> str:
-    """Registro 1151 - IVA/CBS (deixado em branco por ora)."""
-    campos = [
-        "1151",  # 1
+    """Registro 1151 - IVA/CBS."""
+    return "|".join([
+        "1151",  # 1 - Identificação do registro
         "",      # 2 - CBS cClassTrib
         "",      # 3 - CBS Base cálculo
         "",      # 4 - CBS Alíquota
         "",      # 5 - CBS Valor
-    ]
-    return "|".join(campos)
+    ])
 
 # ─────────────────────────────────────────────
 # PROCESSAMENTO PRINCIPAL
 # ─────────────────────────────────────────────
 def converte_nfts(
-    df_nfts: pd.DataFrame,
+    df_notas: pd.DataFrame,
     lookup_acum: dict,
     lookup_pais: dict,
     cnpj_empresa: str,
@@ -403,11 +420,7 @@ def converte_nfts(
     if incluir_0000:
         linhas.append(reg_0000(cnpj_empresa))
 
-    for _, row in df_nfts.iterrows():
-        tipo = safe(row, "Tipo de Registro")
-        if tipo.lower() == "total":
-            continue
-
+    for _, row in df_notas.iterrows():
         especie    = determina_especie(row)
         cfop       = determina_cfop(row)
         acumulador = determina_acumulador(row, lookup_acum)
@@ -418,12 +431,11 @@ def converte_nfts(
         razao      = safe(row, "Razão Social do Prestador")
         valor      = fmt_decimal(safe(row, "Valor dos Serviços"))
         valor_iss  = fmt_decimal(safe(row, "Valor ISS"))
-        iss_retido = safe(row, "ISS Retido").upper()
-        ind        = safe(row, "Indicador de CPF/CNPJ do Prestador")
+        iss_retido = safe(row, "ISS Retido").upper().strip()
         dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
         dt_emissao = fmt_date(safe(row, "Data Hora Emissão NFTS"))
 
-        # Reg 0020 (um por fornecedor)
+        # Reg 0020 — um por fornecedor único
         if incluir_0020:
             chave_forn = fornecedor if fornecedor else razao
             if chave_forn not in fornecedores_vistos:
@@ -431,8 +443,7 @@ def converte_nfts(
                 linhas.append(reg_0020(row, lookup_pais))
 
         # Reg 1000
-        linha_1000 = reg_1000(row, lookup_acum, lookup_pais)
-        linhas.append(linha_1000)
+        linhas.append(reg_1000(row, lookup_acum, lookup_pais))
 
         # Reg 1020
         if incluir_1020:
@@ -509,16 +520,31 @@ st.subheader("📂 Upload de Arquivos")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    file_nfts = st.file_uploader("CSV NFTS", type=["csv"], key="nfts")
+    file_nfts = st.file_uploader(
+        "CSV NFTS",
+        type=["csv"],
+        key="nfts",
+        help="Arquivo exportado do portal NFTS da Prefeitura de SP"
+    )
 with col2:
-    file_acum = st.file_uploader("Acumuladores.xlsx", type=["xlsx"], key="acum")
+    file_acum = st.file_uploader(
+        "Acumuladores.xlsx",
+        type=["xlsx"],
+        key="acum",
+        help="Planilha com sheet 'Acumuladores' contendo colunas PAULISTANA e Codigo ACUMULADOR"
+    )
 with col3:
-    file_pais = st.file_uploader("Países.xls / .xlsx", type=["xls", "xlsx"], key="pais")
+    file_pais = st.file_uploader(
+        "Países.xls / .xlsx",
+        type=["xls", "xlsx"],
+        key="pais",
+        help="Planilha com sheet 'RELAÇÃO DE PAÍSES' contendo colunas Código e Nome"
+    )
 
 # ── Processamento ─────────────────────────────
 if file_nfts and file_acum and file_pais:
 
-    # Carrega dados
+    # ── Lê o CSV NFTS ─────────────────────────
     try:
         df_nfts = pd.read_csv(
             file_nfts,
@@ -528,48 +554,80 @@ if file_nfts and file_acum and file_pais:
         )
     except Exception:
         file_nfts.seek(0)
-        df_nfts = pd.read_csv(
-            file_nfts,
-            sep=";",
-            dtype=str,
-            encoding="latin-1",
-        )
+        try:
+            df_nfts = pd.read_csv(
+                file_nfts,
+                sep=";",
+                dtype=str,
+                encoding="utf-8",
+            )
+        except Exception:
+            file_nfts.seek(0)
+            df_nfts = pd.read_csv(
+                file_nfts,
+                sep=";",
+                dtype=str,
+                encoding="latin-1",
+            )
 
     df_nfts.columns = [c.strip() for c in df_nfts.columns]
 
-    lookup_acum = carrega_acumuladores(file_acum.read())
-    lookup_pais = carrega_paises(file_pais.read())
+    # ── Lê os Excel ───────────────────────────
+    acum_bytes = file_acum.read()
+    pais_bytes = file_pais.read()
+    lookup_acum = carrega_acumuladores(acum_bytes)
+    lookup_pais = carrega_paises(pais_bytes)
 
-    # Filtra apenas registros tipo 4
-    df_notas = df_nfts[df_nfts["Tipo de Registro"].str.strip() == "4"].copy()
+    # ── Filtra apenas registros tipo 4 ────────
+    col_tipo = "Tipo de Registro"
+    if col_tipo not in df_nfts.columns:
+        st.error(f"Coluna '{col_tipo}' não encontrada no CSV. Colunas encontradas: {list(df_nfts.columns)}")
+        st.stop()
 
-    st.success(f"✅ {len(df_notas)} nota(s) carregada(s).")
+    df_notas = df_nfts[
+        df_nfts[col_tipo].str.strip().str.upper() == "4"
+    ].copy()
+
+    if df_notas.empty:
+        st.warning("Nenhuma nota com Tipo de Registro = 4 encontrada no CSV.")
+        st.stop()
+
+    st.success(f"✅ {len(df_notas)} nota(s) carregada(s) | "
+               f"{len(lookup_acum)} acumuladores | "
+               f"{len(lookup_pais)} países")
 
     # ── Tabs ──────────────────────────────────
-    tab1, tab2, tab3 = st.tabs(["📊 Preview", "📄 Arquivo Gerado", "❓ Ajuda"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Preview",
+        "📄 Arquivo Gerado",
+        "🔍 Debug",
+        "❓ Ajuda"
+    ])
 
+    # Processa uma vez e reutiliza
+    conteudo, df_prev = converte_nfts(
+        df_notas,
+        lookup_acum,
+        lookup_pais,
+        cnpj_empresa,
+        incluir_0000,
+        incluir_0020,
+        incluir_1020,
+        incluir_1150,
+        incluir_1151,
+    )
+
+    # ── TAB 1: PREVIEW ────────────────────────
     with tab1:
         st.subheader("Preview das Notas")
-
-        conteudo, df_prev = converte_nfts(
-            df_notas,
-            lookup_acum,
-            lookup_pais,
-            cnpj_empresa,
-            incluir_0000,
-            incluir_0020,
-            incluir_1020,
-            incluir_1150,
-            incluir_1151,
-        )
 
         if not df_prev.empty:
             # Métricas
             n_ret   = len(df_prev[df_prev["ISS Retido"] == "S"])
-            n_nor   = len(df_prev[df_prev["ISS Retido"] == "N"])
+            n_nor   = len(df_prev[df_prev["ISS Retido"] != "S"])
             n_1933  = len(df_prev[df_prev["CFOP"] == CFOP_SP])
             n_2933  = len(df_prev[df_prev["CFOP"] == CFOP_FORA])
-            n_aviso = len(df_prev[df_prev["Acumulador"].str.startswith("AVISO")])
+            n_aviso = len(df_prev[df_prev["Acumulador"].str.startswith("AVISO", na=False)])
 
             m1, m2, m3, m4, m5, m6 = st.columns(6)
             m1.metric("Total notas",          len(df_prev))
@@ -581,12 +639,12 @@ if file_nfts and file_acum and file_pais:
 
             # Tabela colorida
             def highlight_row(row):
-                if row["Acumulador"].startswith("AVISO"):
-                    cor = "#f8d7da"   # vermelho - acumulador não encontrado
-                elif row["ISS Retido"] == "S":
-                    cor = "#d4edda"   # verde - ISS retido
+                if str(row.get("Acumulador", "")).startswith("AVISO"):
+                    cor = "#f8d7da"   # vermelho
+                elif row.get("ISS Retido", "") == "S":
+                    cor = "#d4edda"   # verde
                 else:
-                    cor = "#fff3cd"   # amarelo - ISS normal
+                    cor = "#fff3cd"   # amarelo
                 return [f"background-color: {cor}"] * len(row)
 
             st.dataframe(
@@ -598,27 +656,31 @@ if file_nfts and file_acum and file_pais:
             col_l1, col_l2, col_l3 = st.columns(3)
             col_l1.markdown(
                 "<span style='background:#d4edda;padding:2px 8px;border-radius:4px'>"
-                "Verde = ISS Retido (Cód.18)</span>",
+                "🟢 Verde = ISS Retido (Cód.18)</span>",
                 unsafe_allow_html=True,
             )
             col_l2.markdown(
                 "<span style='background:#fff3cd;padding:2px 8px;border-radius:4px'>"
-                "Amarelo = ISS Normal (Cód.3)</span>",
+                "🟡 Amarelo = ISS Normal (Cód.3)</span>",
                 unsafe_allow_html=True,
             )
             col_l3.markdown(
                 "<span style='background:#f8d7da;padding:2px 8px;border-radius:4px'>"
-                "Vermelho = Acumulador não mapeado</span>",
+                "🔴 Vermelho = Acumulador não mapeado</span>",
                 unsafe_allow_html=True,
             )
 
+    # ── TAB 2: ARQUIVO GERADO ─────────────────
     with tab2:
         st.subheader("Arquivo de Importação Gerado")
 
-        if not df_prev.empty:
+        if conteudo:
             st.code(conteudo, language="text")
 
-            nome_arquivo = f"importacao_nfts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            nome_arquivo = (
+                f"importacao_nfts_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            )
             st.download_button(
                 label="⬇️ Baixar arquivo .txt",
                 data=conteudo.encode("utf-8"),
@@ -626,41 +688,121 @@ if file_nfts and file_acum and file_pais:
                 mime="text/plain",
             )
 
-            # Linhas com aviso
+            # Avisos de acumulador não mapeado
             avisos = [l for l in conteudo.splitlines() if "AVISO" in l]
             if avisos:
                 st.warning(f"⚠️ {len(avisos)} linha(s) com acumulador não mapeado:")
                 for a in avisos:
                     st.code(a)
 
+    # ── TAB 3: DEBUG ──────────────────────────
     with tab3:
+        st.subheader("🔍 Debug — Dados Carregados")
+
+        with st.expander("CSV NFTS — Dados brutos (todas as colunas)"):
+            st.dataframe(df_notas, use_container_width=True)
+
+        with st.expander(f"Acumuladores carregados ({len(lookup_acum)} itens)"):
+            df_acum_debug = pd.DataFrame(
+                list(lookup_acum.items()),
+                columns=["PAULISTANA", "Acumulador"]
+            )
+            st.dataframe(df_acum_debug, use_container_width=True)
+
+        with st.expander(f"Países carregados ({len(lookup_pais)} itens)"):
+            df_pais_debug = pd.DataFrame(
+                list(lookup_pais.items()),
+                columns=["Nome", "Código"]
+            )
+            st.dataframe(df_pais_debug, use_container_width=True)
+
+        with st.expander("Mapeamento campo a campo por nota"):
+            for _, row in df_notas.iterrows():
+                nfts = safe(row, "Nº NFTS")
+                st.markdown(f"**NFTS {nfts}**")
+                debug_data = {
+                    "Campo": [
+                        "Indicador Prestador",
+                        "CPF/CNPJ Prestador",
+                        "Razão Social",
+                        "UF Prestador",
+                        "PAULISTANA",
+                        "ISS Retido",
+                        "Valor Serviços",
+                        "Valor ISS",
+                        "Alíquota",
+                        "→ Especie",
+                        "→ CFOP",
+                        "→ Acumulador",
+                        "→ Fornecedor",
+                        "→ UF",
+                        "→ Cód ISS",
+                        "→ Cód País",
+                    ],
+                    "Valor": [
+                        safe(row, "Indicador de CPF/CNPJ do Prestador"),
+                        safe(row, "CPF/CNPJ do Prestador"),
+                        safe(row, "Razão Social do Prestador"),
+                        safe(row, "UF do Prestador"),
+                        limpa_numero(safe(row, "Código do Serviço Prestado na NFTS")),
+                        safe(row, "ISS Retido"),
+                        safe(row, "Valor dos Serviços"),
+                        safe(row, "Valor ISS"),
+                        safe(row, "Alíquota"),
+                        determina_especie(row),
+                        determina_cfop(row),
+                        determina_acumulador(row, lookup_acum),
+                        determina_fornecedor(row),
+                        determina_uf(row),
+                        determina_cod_iss(row),
+                        determina_cod_pais(row, lookup_pais),
+                    ]
+                }
+                st.dataframe(
+                    pd.DataFrame(debug_data),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                st.markdown("---")
+
+    # ── TAB 4: AJUDA ──────────────────────────
+    with tab4:
         st.subheader("❓ Ajuda — Regras de Importação")
 
         st.markdown("### Regras automáticas aplicadas")
         df_regras = pd.DataFrame([
-            ["Indicador=3 (Exterior)", "39", "2933", "2551 - SERVIÇOS TOMADOS IMPORTAÇÃO", "EX + Cód.País"],
-            ["Indicador=1/2, UF=SP",   "39", "1933", "Lookup PAULISTANA",                  "UF real"],
-            ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA",                  "UF real"],
-            ["Indicador=1/2, UF vazia","39", "2933", "Lookup PAULISTANA",                  "-"],
-        ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF"])
-        st.dataframe(df_regras, use_container_width=True)
+            ["Indicador=3 (Exterior)", "39", "2933", "2551 - SERVIÇOS TOMADOS IMPORTAÇÃO", "EX", "76 (EUA)"],
+            ["Indicador=1/2, UF=SP",   "39", "1933", "Lookup PAULISTANA",                  "SP", ""],
+            ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA",                  "UF real", ""],
+            ["Indicador=1/2, UF vazia","39", "2933", "Lookup PAULISTANA",                  "-", ""],
+        ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"])
+        st.dataframe(df_regras, use_container_width=True, hide_index=True)
 
-        st.markdown("### Campos do Registro 1000")
+        st.markdown("### Campos principais do Registro 1000")
         df_campos = pd.DataFrame([
-            ["Campo 2",  "Espécie",     "Todas as notas",                    "39"],
-            ["Campo 3",  "Fornecedor",  "Nacional = CNPJ / Exterior = vazio","—"],
+            ["Campo 2",  "Espécie",     "Todas as notas",                     "39"],
+            ["Campo 3",  "Fornecedor",  "Nacional = CNPJ / Exterior = vazio", "—"],
             ["Campo 5",  "Acumulador",  "Exterior = 2551 / Nacional = lookup","—"],
-            ["Campo 6",  "CFOP",        "SP = 1933 / Outros = 2933",         "—"],
+            ["Campo 6",  "CFOP",        "SP = 1933 / Outros/EXT = 2933",      "—"],
+            ["Campo 11", "Dt Entrada",  "Data da Prestação de Serviços",      "dd/mm/aaaa"],
+            ["Campo 12", "Dt Emissão",  "Data Hora Emissão NFTS",             "dd/mm/aaaa"],
+            ["Campo 13", "Valor",       "Valor dos Serviços",                 "decimal"],
             ["Campo 20", "Cód ISS",     "ISS Retido S = 18 / N = 3",         "—"],
-        ], columns=["Campo", "Nome", "Regra", "Valor fixo"])
-        st.dataframe(df_campos, use_container_width=True)
+        ], columns=["Campo", "Nome", "Regra", "Valor/Formato"])
+        st.dataframe(df_campos, use_container_width=True, hide_index=True)
 
-        st.markdown("### Exemplo de saída esperada")
+        st.markdown("### Exemplo de saída esperada com os dados reais")
         df_ex = pd.DataFrame([
-            ["196/195", "Tenjin INC",  "Ind.=3 / EXT", "39 / 2933 / 2551 / País=76 (EUA)"],
-            ["194",     "ALELO S.A.", "Ind.=2 / SP",  "39 / 1933 / 2237 / ISS Normal cód.3"],
-        ], columns=["NFTS", "Prestador", "Situação", "Espécie/CFOP/Acum/ISS"])
-        st.dataframe(df_ex, use_container_width=True)
+            ["196", "Tenjin INC",  "Ind.=3 / EXT / SACRAMENTO", "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
+            ["195", "Tenjin INC",  "Ind.=3 / EXT",              "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
+            ["194", "ALELO S.A.", "Ind.=2 / SP / PAULISTANA=6157","39 / 1933 / 2237 / UF=SP / ISS=3"],
+        ], columns=["NFTS", "Prestador", "Situação", "Espécie/CFOP/Acum/UF/ISS"])
+        st.dataframe(df_ex, use_container_width=True, hide_index=True)
 
 else:
-    st.info("👆 Faça upload dos 3 arquivos para iniciar: CSV NFTS, Acumuladores.xlsx e Países.xls")
+    st.info(
+        "👆 Faça upload dos 3 arquivos para iniciar:\n\n"
+        "1. **CSV NFTS** — exportado do portal da Prefeitura SP\n"
+        "2. **Acumuladores.xlsx** — com sheet 'Acumuladores'\n"
+        "3. **Países.xls/.xlsx** — com sheet 'RELAÇÃO DE PAÍSES'"
+    )
