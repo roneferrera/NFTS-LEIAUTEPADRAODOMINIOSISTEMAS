@@ -64,7 +64,7 @@ def limpa_numero(value):
         return str(value).strip()
 
 def monta_linha(campos: list) -> str:
-    """Junta campos com pipe E adiciona pipe final para fechar o último campo."""
+    """Une campos com pipe E adiciona pipe final para fechar o último campo."""
     return "|".join(campos) + "|"
 
 # ─────────────────────────────────────────────
@@ -170,17 +170,18 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
 
 # ─────────────────────────────────────────────
 # MONTA REGISTROS
-# Leiaute: 0000=2 campos | 0020=33 | 1000=98 | 1020=19
-# Todos os registros terminam com pipe (pipe final fecha o último campo)
+# Leiaute: 0000=2 | 0020=33 | 1000=98 | 1020=19 campos
+# Todos terminam com pipe final (fecha o último campo)
 # ─────────────────────────────────────────────
 
 def reg_0000(cnpj_empresa: str) -> str:
     # 2 campos conforme leiaute oficial
     campos = [
-        "0000",       # campo 1 - Identificação do registro
-        cnpj_empresa, # campo 2 - Inscrição da empresa
+        "0000",        # 1 - Identificação do registro
+        cnpj_empresa,  # 2 - Inscrição da empresa
     ]
-    return monta_linha(campos)  # gera: 0000|20586841000130|
+    return monta_linha(campos)
+    # resultado: 0000|20586841000130|
 
 def reg_0020(row, lookup_pais: dict) -> str:
     # 33 campos conforme leiaute oficial
@@ -340,8 +341,8 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 89 - Pedágio
         "",          # 90 - IPI
         "",          # 91 - ICMS ST
-        "",          # 92 - Classificação de Serviços EFD-Reinf (tipo)
-        "",          # 93 - Classificação de Serviços EFD-Reinf (indicativo)
+        "",          # 92 - Classificação EFD-Reinf (tipo)
+        "",          # 93 - Classificação EFD-Reinf (indicativo)
         "",          # 94 - Número do documento de arrecadação
         "",          # 95 - Tipo do título
         "",          # 96 - Identificação
@@ -392,9 +393,11 @@ def reg_1020(row) -> str:
     return monta_linha(campos)
 
 def reg_1150(_row) -> str:
+    # 5 campos (estrutura mínima — ajuste se tiver leiaute oficial)
     return monta_linha(["1150", "", "", "", ""])
 
 def reg_1151(_row) -> str:
+    # 5 campos (estrutura mínima — ajuste se tiver leiaute oficial)
     return monta_linha(["1151", "", "", "", ""])
 
 # ─────────────────────────────────────────────
@@ -702,7 +705,7 @@ if file_nfts:
             ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA",                  "UF real", ""],
             ["Indicador=1/2, UF vazia","39", "2933", "Lookup PAULISTANA",                  "-",       ""],
         ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"]),
-        use_container_True, hide_index=True)
+        use_container_width=True, hide_index=True)
 
         st.markdown("### Campos principais do Registro 1000")
         st.dataframe(pd.DataFrame([
