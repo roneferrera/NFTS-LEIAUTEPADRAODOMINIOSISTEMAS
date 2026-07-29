@@ -161,13 +161,46 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
     return lookup_pais.get("ESTADOS UNIDOS", "76")
 
 # ─────────────────────────────────────────────
+# ✅ ALERTA: NOTAS DUPLICADAS (mesmo fornecedor + mesmo número)
+# ─────────────────────────────────────────────
+def detecta_duplicatas(df_notas) -> pd.DataFrame:
+    """
+    Retorna DataFrame com as notas duplicadas:
+    mesmo Razão Social do Prestador + mesmo Número do Documento.
+    """
+    df = df_notas.copy()
+    df["_razao"]  = df.apply(lambda r: safe(r, "Razão Social do Prestador"), axis=1)
+    df["_num_doc"] = df.apply(lambda r: limpa_numero(safe(r, "Número do Documento")), axis=1)
+    df["_chave"]  = df["_razao"] + "||" + df["_num_doc"]
+
+    duplicados = df[df.duplicated(subset=["_chave"], keep=False)].copy()
+    if duplicados.empty:
+        return pd.DataFrame()
+
+    return duplicados[[
+        "Nº NFTS",
+        "Razão Social do Prestador",
+        "Número do Documento",
+        "Data Hora Emissão NFTS",
+        "Valor dos Serviços",
+        "ISS Retido",
+    ]].rename(columns={
+        "Nº NFTS":                    "NFTS",
+        "Razão Social do Prestador":  "Prestador",
+        "Número do Documento":        "Nº Documento",
+        "Data Hora Emissão NFTS":     "Data Emissão",
+        "Valor dos Serviços":         "Valor",
+        "ISS Retido":                 "ISS Retido",
+    })
+
+# ─────────────────────────────────────────────
 # MONTA REGISTROS
 # ─────────────────────────────────────────────
 
 def reg_0000(cnpj_empresa: str) -> str:
     return monta_linha([
-        "0000",        # 1 - Identificação do registro
-        cnpj_empresa,  # 2 - Inscrição da empresa
+        "0000",
+        cnpj_empresa,
     ])
 
 def reg_0020(row, lookup_pais: dict) -> str:
@@ -185,39 +218,39 @@ def reg_0020(row, lookup_pais: dict) -> str:
     email       = safe(row, "Email do Prestador")
 
     campos = [
-        "0020",      # 1  - Identificação do registro (fixo)
-        fornecedor,  # 2  - Inscrição CNPJ/CPF/CEI/CAEPF (só números)
-        razao,       # 3  - Razão Social (max 150 chars)
-        apelido,     # 4  - Apelido/Nome reduzido (max 40 chars) ✅
-        endereco,    # 5  - Endereço
-        numero_end,  # 6  - Número do endereço (numérico)
-        complemento, # 7  - Complemento
-        bairro,      # 8  - Bairro
-        "",          # 9  - Código do município
-        uf,          # 10 - UF (EX para exterior)
-        cod_pais,    # 11 - Código do País (só exterior)
-        cep,         # 12 - CEP
-        "",          # 13 - Inscrição Estadual
-        "",          # 14 - Inscrição Municipal
-        "",          # 15 - Inscrição Suframa
-        "",          # 16 - DDD
-        "",          # 17 - Telefone
-        "",          # 18 - FAX
-        "",          # 19 - Data do cadastro (dd/mm/aaaa)
-        "",          # 20 - Conta contábil (numérico)
-        "",          # 21 - Conta contábil cliente (numérico)
-        "N",         # 22 - Agropecuário ✅ (S/N obrigatório)
-        "",          # 23 - Natureza jurídica (1-8)
-        "N",         # 24 - Regime de apuração ✅ (N=Normal, obrigatório)
-        "N",         # 25 - Contribuinte ICMS ✅ (S/N obrigatório)
-        "",          # 26 - Alíquota ICMS (só se campo 25=S)
-        "",          # 27 - Categoria do estabelecimento
-        "",          # 28 - Inscrição Estadual ST
-        email,       # 29 - Email
-        "",          # 30 - Interdependência com a empresa (S/N)
-        "N",         # 31 - Contribuinte da CPRB ✅ (S/N obrigatório)
-        "",          # 32 - Processo administrativo/judicial (max 21 chars)
-        "",          # 33 - Tipo Inscrição (1=CAEPF)
+        "0020",      # 1
+        fornecedor,  # 2
+        razao,       # 3
+        apelido,     # 4  ✅ Nome reduzido obrigatório
+        endereco,    # 5
+        numero_end,  # 6
+        complemento, # 7
+        bairro,      # 8
+        "",          # 9
+        uf,          # 10
+        cod_pais,    # 11
+        cep,         # 12
+        "",          # 13
+        "",          # 14
+        "",          # 15
+        "",          # 16
+        "",          # 17
+        "",          # 18
+        "",          # 19
+        "",          # 20
+        "",          # 21
+        "N",         # 22 ✅ Agropecuário
+        "",          # 23
+        "N",         # 24 ✅ Regime de apuração
+        "N",         # 25 ✅ Contribuinte ICMS
+        "",          # 26
+        "",          # 27
+        "",          # 28
+        email,       # 29
+        "",          # 30
+        "N",         # 31 ✅ Contribuinte CPRB
+        "",          # 32
+        "",          # 33
     ]
     assert len(campos) == 33, f"reg_0020: esperado 33 campos, encontrado {len(campos)}"
     return monta_linha(campos)
@@ -234,109 +267,108 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
 
     dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))
     dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços"))
-
-    valor   = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
-    cod_iss = determina_cod_iss(row)
+    valor      = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
+    cod_iss    = determina_cod_iss(row)
 
     campos = [
-        "1000",      # 1  - Identificação do registro (fixo)
-        especie,     # 2  - Código da espécie
-        fornecedor,  # 3  - Inscrição fornecedor
-        "",          # 4  - Código de Exclusão da DIEF
-        acumulador,  # 5  - Código do acumulador
-        cfop,        # 6  - CFOP
-        "",          # 7  - Segmento
-        num_doc,     # 8  - Número do documento
-        serie,       # 9  - Série
-        "",          # 10 - Numero do documento final
-        dt_campo11,  # 11 - Data da entrada (Emissão NFTS)
-        dt_campo12,  # 12 - Data emissão (Prestação Serviço)
-        valor,       # 13 - Valor contábil ✅
-        "",          # 14 - Valor da exclusão da DIEF
-        "",          # 15 - Observação
-        "",          # 16 - Modalidade do frete
-        "",          # 17 - Emitente da nota fiscal
-        "",          # 18 - CFOP estendido
-        "",          # 19 - Código da transferência de crédito
-        cod_iss,     # 20 - Código do Recolhimento do ISS Retido
-        "",          # 21 - Código do Recolhimento do IRRF
-        "",          # 22 - Código da observação
-        "",          # 23 - Data do visto
-        "",          # 24 - Fato gerador da CRF
-        "",          # 25 - Fato gerador do IRRF
-        "",          # 26 - Valor do frete
-        "",          # 27 - Valor do seguro
-        "",          # 28 - Valor das despesas
-        "",          # 29 - Valor do PIS
-        "",          # 30 - Código Antecipação Tributária
-        "",          # 31 - Valor do COFINS
-        "",          # 32 - Valor DARE
-        "",          # 33 - Alíquota DARE
-        "",          # 34 - Valor base ICMS ST
-        "",          # 35 - Entradas cuja saída é isenta
-        "",          # 36 - Outras entradas isentas
-        "",          # 37 - Valor transporte incluído na base
-        "",          # 38 - Código de ressarcimento
-        valor,       # 39 - Valor produtos ✅ = Valor contábil (campo 13)
-        "",          # 40 - Município Origem
-        "",          # 41 - Situação da Nota
-        "",          # 42 - Código da situação tributária
-        "",          # 43 - Sub serie
-        "",          # 44 - Inscrição estadual do fornecedor
-        "",          # 45 - Inscrição municipal do fornecedor
-        "",          # 46 - Código da operação e prestação
-        "",          # 47 - Valor a ser deduzido da receita tributável
-        "",          # 48 - Competência
-        "",          # 49 - Operação
-        "",          # 50 - Número do parecer fiscal
-        "",          # 51 - Data do parecer fiscal
-        "",          # 52 - Número da declaração de Importação
-        "",          # 53 - Possui benefício fiscal
-        "",          # 54 - Chave da nota fiscal eletrônica
-        "",          # 55 - Código de recolhimento do FETHAB
-        "",          # 56 - Responsável pelo recolhimento do FETHAB
-        "",          # 57 - CFOP documento fiscal
-        "",          # 58 - Tipo de CT-e
-        "",          # 59 - CT-e referência
-        "",          # 60 - Modalidade da importação
-        "",          # 61 - Código da informação complementar
-        "",          # 62 - Informação complementar
-        "",          # 63 - Classe de consumo
-        "",          # 64 - Tipo de ligação
-        "",          # 65 - Grupo de tensão
-        "",          # 66 - Tipo de assinante
-        "",          # 67 - KWH consumido
-        "",          # 68 - Valor fornecido/consumido
-        "",          # 69 - Valor cobrado de terceiros
-        "",          # 70 - Tipo do documento de importação
-        "",          # 71 - Número do Ato Concessório Drawback
-        "",          # 72 - Natureza do frete PIS/COFINS
-        "",          # 73 - CST PIS/COFINS
-        "",          # 74 - Base do crédito PIS/COFINS
-        "",          # 75 - Valor serviços/itens PIS/COFINS
-        "",          # 76 - Base de cálculo PIS/COFINS
-        "",          # 77 - Alíquota de PIS
-        "",          # 78 - Alíquota de COFINS
-        "",          # 79 - Chave de NFSe
-        "",          # 80 - Número do processo ou ato concessório
-        "",          # 81 - Origem do processo
-        "",          # 82 - Data da escrituração
-        "",          # 83 - CFPS
-        "",          # 84 - Natureza da receita PIS/COFINS
-        "",          # 85 - CST IPI
-        "",          # 86 - Lançamentos de SCP
-        "",          # 87 - Tipo de serviço
-        "",          # 88 - Município destino
-        "",          # 89 - Pedágio
-        "",          # 90 - IPI
-        "",          # 91 - ICMS ST
-        "",          # 92 - Classificação EFD-Reinf tipo
-        "",          # 93 - Classificação EFD-Reinf indicativo
-        "",          # 94 - Número do documento de arrecadação
-        "",          # 95 - Tipo do título
-        "",          # 96 - Identificação
-        "",          # 97 - ICMS Desonerado
-        "",          # 98 - IPI Devolução
+        "1000",      # 1
+        especie,     # 2
+        fornecedor,  # 3
+        "",          # 4
+        acumulador,  # 5
+        cfop,        # 6
+        "",          # 7
+        num_doc,     # 8
+        serie,       # 9
+        "",          # 10
+        dt_campo11,  # 11
+        dt_campo12,  # 12
+        valor,       # 13 ✅ Valor contábil
+        "",          # 14
+        "",          # 15
+        "",          # 16
+        "",          # 17
+        "",          # 18
+        "",          # 19
+        cod_iss,     # 20
+        "",          # 21
+        "",          # 22
+        "",          # 23
+        "",          # 24
+        "",          # 25
+        "",          # 26
+        "",          # 27
+        "",          # 28
+        "",          # 29
+        "",          # 30
+        "",          # 31
+        "",          # 32
+        "",          # 33
+        "",          # 34
+        "",          # 35
+        "",          # 36
+        "",          # 37
+        "",          # 38
+        valor,       # 39 ✅ Valor produtos = Valor contábil
+        "",          # 40
+        "",          # 41
+        "",          # 42
+        "",          # 43
+        "",          # 44
+        "",          # 45
+        "",          # 46
+        "",          # 47
+        "",          # 48
+        "",          # 49
+        "",          # 50
+        "",          # 51
+        "",          # 52
+        "",          # 53
+        "",          # 54
+        "",          # 55
+        "",          # 56
+        "",          # 57
+        "",          # 58
+        "",          # 59
+        "",          # 60
+        "",          # 61
+        "",          # 62
+        "",          # 63
+        "",          # 64
+        "",          # 65
+        "",          # 66
+        "",          # 67
+        "",          # 68
+        "",          # 69
+        "",          # 70
+        "",          # 71
+        "",          # 72
+        "",          # 73
+        "",          # 74
+        "",          # 75
+        "",          # 76
+        "",          # 77
+        "",          # 78
+        "",          # 79
+        "",          # 80
+        "",          # 81
+        "",          # 82
+        "",          # 83
+        "",          # 84
+        "",          # 85
+        "",          # 86
+        "",          # 87
+        "",          # 88
+        "",          # 89
+        "",          # 90
+        "",          # 91
+        "",          # 92
+        "",          # 93
+        "",          # 94
+        "",          # 95
+        "",          # 96
+        "",          # 97
+        "",          # 98
     ]
     assert len(campos) == 98, f"reg_1000: esperado 98 campos, encontrado {len(campos)}"
     return monta_linha(campos)
@@ -364,36 +396,35 @@ def reg_1020(row) -> str:
     if v_iss == 0.0 and iss_retido != "S":
         return ""
 
-    # ✅ REGRA ISS:
-    # Retido  (Cód.18) → Campo 6 (Valor Imposto) = valor_iss | Campo 8 (Valor Outras) = ""
-    # Normal  (Cód. 3) → Campo 6 (Valor Imposto) = ""        | Campo 8 (Valor Outras) = valor_iss
+    # ✅ ISS Retido  → Campo 6 (Valor Imposto) | Campo 8 vazio
+    # ✅ ISS Normal  → Campo 6 vazio            | Campo 8 (Valor Outras)
     if iss_retido == "S":
-        campo6_valor_imposto = valor_iss
-        campo8_valor_outras  = ""
+        campo6 = valor_iss
+        campo8 = ""
     else:
-        campo6_valor_imposto = ""
-        campo8_valor_outras  = valor_iss
+        campo6 = ""
+        campo8 = valor_iss
 
     campos = [
-        "1020",              # 1  - Identificação do registro (fixo)
-        cod_iss,             # 2  - Código do imposto (18=Retido / 3=Normal)
-        "",                  # 3  - Percentual de redução da base de cálculo
-        valor_serv,          # 4  - Base de cálculo
-        aliquota,            # 5  - Alíquota (decimal 2)
-        campo6_valor_imposto,# 6  - Valor do Imposto ✅ (só se Retido)
-        "",                  # 7  - Valor de Isentas
-        campo8_valor_outras, # 8  - Valor de Outras ✅ (só se Normal)
-        "",                  # 9  - Valor do IPI
-        "",                  # 10 - Valor da substituição Tributária
-        valor_serv,          # 11 - Valor Contábil
-        "",                  # 12 - Código do recolhimento do imposto
-        "",                  # 13 - Valor não tributadas (só GO)
-        "",                  # 14 - Valor parcela reduzida (só GO)
-        "",                  # 15 - Alíq. Interest. (só RS/SP)
-        "",                  # 16 - Nat. rend.
-        "",                  # 17 - Tipo de Dedução
-        "",                  # 18 - Tipo de Isenção
-        "",                  # 19 - Descrição
+        "1020",     # 1
+        cod_iss,    # 2
+        "",         # 3
+        valor_serv, # 4  Base de cálculo
+        aliquota,   # 5  Alíquota
+        campo6,     # 6  ✅ Valor Imposto (só Retido)
+        "",         # 7  Valor Isentas
+        campo8,     # 8  ✅ Valor Outras (só Normal)
+        "",         # 9
+        "",         # 10
+        valor_serv, # 11 Valor Contábil
+        "",         # 12
+        "",         # 13
+        "",         # 14
+        "",         # 15
+        "",         # 16
+        "",         # 17
+        "",         # 18
+        "",         # 19
     ]
     assert len(campos) == 19, f"reg_1020: esperado 19 campos, encontrado {len(campos)}"
     return monta_linha(campos)
@@ -550,6 +581,21 @@ if file_nfts:
         st.warning("Nenhuma nota com Tipo de Registro = 4 encontrada no CSV.")
         st.stop()
 
+    # ✅ ALERTA DE DUPLICATAS — antes de qualquer processamento
+    df_dup = detecta_duplicatas(df_notas)
+    if not df_dup.empty:
+        st.error(
+            f"⚠️ **{len(df_dup)} nota(s) com número de documento duplicado para o mesmo fornecedor!**\n\n"
+            "Verifique as notas abaixo antes de importar."
+        )
+        st.dataframe(
+            df_dup.style.apply(
+                lambda x: ["background-color: #f8d7da"] * len(x), axis=1
+            ),
+            use_container_width=True,
+        )
+        st.markdown("---")
+
     st.success(
         f"✅ {len(df_notas)} nota(s) | "
         f"{len(lookup_acum)} acumuladores | "
@@ -573,14 +619,16 @@ if file_nfts:
             n_1933  = len(df_prev[df_prev["CFOP"] == CFOP_SP])
             n_2933  = len(df_prev[df_prev["CFOP"] == CFOP_FORA])
             n_aviso = len(df_prev[df_prev["Acumulador"].str.startswith("AVISO", na=False)])
+            n_dup   = len(df_dup) if not df_dup.empty else 0
 
-            m1, m2, m3, m4, m5, m6 = st.columns(6)
+            m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
             m1.metric("Total notas",          len(df_prev))
             m2.metric("ISS Retido (cód.18)",  n_ret)
             m3.metric("ISS Normal (cód.3)",   n_nor)
             m4.metric("CFOP 1933 (SP)",       n_1933)
             m5.metric("CFOP 2933 (fora/EXT)", n_2933)
             m6.metric("Acum. não mapeado",    n_aviso, delta_color="inverse")
+            m7.metric("🔴 Duplicatas",         n_dup,   delta_color="inverse")
 
             def highlight_row(row):
                 if str(row.get("Acumulador", "")).startswith("AVISO"):
@@ -708,9 +756,9 @@ if file_nfts:
 
         st.markdown("### Regras automáticas aplicadas")
         st.dataframe(pd.DataFrame([
-            ["Indicador=3 (Exterior)", "39", "2933", "2551",               "EX",     "76 (EUA)"],
-            ["Indicador=1/2, UF=SP",   "39", "1933", "Lookup PAULISTANA", "SP",      ""],
-            ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA", "UF real", ""],
+            ["Indicador=3 (Exterior)", "39", "2933", "2551",               "EX",      "76 (EUA)"],
+            ["Indicador=1/2, UF=SP",   "39", "1933", "Lookup PAULISTANA", "SP",       ""],
+            ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA", "UF real",  ""],
         ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"]),
         use_container_width=True, hide_index=True)
 
@@ -726,21 +774,30 @@ if file_nfts:
 
         st.markdown("### Regra ISS — Registro 1020")
         st.dataframe(pd.DataFrame([
-            ["ISS Retido", "Cód.18", "valor_iss", '""',       "Campo 6 = Valor do Imposto"],
-            ["ISS Normal", "Cód. 3", '""',        "valor_iss","Campo 8 = Valor de Outras ✅"],
+            ["ISS Retido", "Cód.18", "valor_iss", '""',        "Campo 6 = Valor do Imposto"],
+            ["ISS Normal", "Cód. 3", '""',         "valor_iss", "Campo 8 = Valor de Outras ✅"],
         ], columns=["Situação", "Cód ISS", "Campo 6", "Campo 8", "Observação"]),
+        use_container_width=True, hide_index=True)
+
+        st.markdown("### Alerta de duplicatas")
+        st.dataframe(pd.DataFrame([
+            ["Mesmo Fornecedor + Mesmo Nº Documento", "🔴 Alerta vermelho no topo da página"],
+            ["Acumulador não mapeado",                "🔴 Linha vermelha no preview"],
+            ["Acumulador não mapeado",                "⚠️ Aviso na aba Arquivo Gerado"],
+        ], columns=["Condição", "Ação"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Todas as correções aplicadas")
         st.dataframe(pd.DataFrame([
-            ["0020", "4",  "Nome reduzido",      '""', "razao[:40]",  "❌ Obrigatório"],
-            ["0020", "22", "Agropecuário",        '""', '"N"',         "⚠️ Obrigatório"],
-            ["0020", "24", "Regime de apuração",  '""', '"N"',         "⚠️ Obrigatório"],
-            ["0020", "25", "Contribuinte ICMS",   '""', '"N"',         "⚠️ Obrigatório"],
-            ["0020", "31", "Contribuinte CPRB",   '""', '"N"',         "⚠️ Obrigatório"],
-            ["1000", "39", "Valor produtos",      '""', "valor",       "⚠️ = Campo 13"],
-            ["1020", "6",  "Valor Imposto",   "sempre", "só Retido",   "✅ ISS Retido"],
-            ["1020", "8",  "Valor Outras",       '""', "valor_iss",    "✅ ISS Normal"],
+            ["0020", "4",  "Nome reduzido",     '""', "razao[:40]", "❌ Obrigatório"],
+            ["0020", "22", "Agropecuário",       '""', '"N"',        "⚠️ Obrigatório"],
+            ["0020", "24", "Regime de apuração", '""', '"N"',        "⚠️ Obrigatório"],
+            ["0020", "25", "Contribuinte ICMS",  '""', '"N"',        "⚠️ Obrigatório"],
+            ["0020", "31", "Contribuinte CPRB",  '""', '"N"',        "⚠️ Obrigatório"],
+            ["1000", "39", "Valor produtos",     '""', "valor",      "⚠️ = Campo 13"],
+            ["1020", "6",  "Valor Imposto",  "sempre", "só Retido",  "✅ ISS Retido"],
+            ["1020", "8",  "Valor Outras",      '""', "valor_iss",   "✅ ISS Normal"],
+            ["—",    "—",  "Duplicatas",        "—",  "Alerta 🔴",   "✅ Novo"],
         ], columns=["Registro", "Campo", "Nome", "Antes", "Depois", "Motivo"]),
         use_container_width=True, hide_index=True)
 
