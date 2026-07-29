@@ -32,18 +32,31 @@ def safe(row, col, default=""):
     return str(val).strip()
 
 def fmt_decimal(value, decimals=2):
+    """
+    Converte valor para decimal com N casas.
+    Suporta: 1.747,85 | 1747.85 | 1747,85
+    """
     try:
-        s = str(value).strip().replace(".", "").replace(",", ".")
+        s = str(value).strip()
+        if not s or s in ("nan", ""):
+            return f"0.{'0'*decimals}"
+        # Se tem vírgula E ponto → ponto é milhar, vírgula é decimal
+        if "," in s and "." in s:
+            s = s.replace(".", "").replace(",", ".")
+        # Se só tem vírgula → vírgula é decimal
+        elif "," in s:
+            s = s.replace(",", ".")
+        # Se só tem ponto → ponto é decimal (já está correto)
         v = float(s)
         return f"{v:.{decimals}f}"
     except Exception:
         return f"0.{'0'*decimals}"
 
 def fmt_date(value):
-    if pd.isna(value) or str(value).strip() in ("", "nan"):
+    if not value or str(value).strip() in ("", "nan"):
         return ""
     s = str(value).strip()
-    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d"):
+    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
             return datetime.strptime(s, fmt).strftime("%d/%m/%Y")
         except Exception:
@@ -51,12 +64,12 @@ def fmt_date(value):
     return s
 
 def limpa_cnpj(value):
-    if pd.isna(value) or str(value).strip() in ("", "nan"):
+    if not value or str(value).strip() in ("", "nan"):
         return ""
     return re.sub(r"\D", "", str(value))
 
 def limpa_numero(value):
-    if pd.isna(value) or str(value).strip() in ("", "nan"):
+    if not value or str(value).strip() in ("", "nan"):
         return ""
     try:
         return str(int(float(str(value).replace(",", "."))))
@@ -64,23 +77,19 @@ def limpa_numero(value):
         return str(value).strip()
 
 def monta_linha(campos: list) -> str:
-    """Une campos com pipe E adiciona pipe final para fechar o último campo."""
-    return "|".join(campos) + "|"
+    """Une campos com pipe E adiciona pipe final — fecha o último campo."""
+    return "|".join([str(c) for c in campos]) + "|"
 
 # ─────────────────────────────────────────────
 # CARREGA ACUMULADORES DO EXCEL
 # ─────────────────────────────────────────────
 def _parse_acumuladores(file_bytes: bytes) -> dict:
-    df = pd.read_excel(
-        io.BytesIO(file_bytes),
-        sheet_name="Acumuladores",
-        dtype=str,
-    )
+    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name="Acumuladores", dtype=str)
     df.columns = [c.strip() for c in df.columns]
     lookup = {}
     for _, row in df.iterrows():
-        paulistana = re.sub(r"\.0$", "", str(row.get("PAULISTANA", "")).strip()).strip()
-        acumulador = re.sub(r"\.0$", "", str(row.get("Codigo ACUMULADOR", "")).strip()).strip()
+        paulistana = re.sub(r"\.0$", "", str(row.get("PAULISTANA", "")).strip())
+        acumulador = re.sub(r"\.0$", "", str(row.get("Codigo ACUMULADOR", "")).strip())
         if paulistana and paulistana not in ("", "nan"):
             lookup[paulistana] = acumulador
     return lookup
@@ -89,16 +98,12 @@ def _parse_acumuladores(file_bytes: bytes) -> dict:
 # CARREGA PAÍSES DO EXCEL
 # ─────────────────────────────────────────────
 def _parse_paises(file_bytes: bytes) -> dict:
-    df = pd.read_excel(
-        io.BytesIO(file_bytes),
-        sheet_name="RELAÇÃO DE PAÍSES",
-        dtype=str,
-    )
+    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name="RELAÇÃO DE PAÍSES", dtype=str)
     df.columns = [c.strip() for c in df.columns]
     lookup = {}
     for _, row in df.iterrows():
         nome   = str(row.get("Nome", "")).strip().upper()
-        codigo = re.sub(r"\.0$", "", str(row.get("Código", "")).strip()).strip()
+        codigo = re.sub(r"\.0$", "", str(row.get("Código", "")).strip())
         if nome and codigo and nome != "NAN":
             lookup[nome] = codigo
     return lookup
@@ -161,11 +166,6 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
     ind_num = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     if ind_num != "3":
         return ""
-    bairro   = safe(row, "Bairro do Prestador").upper().strip()
-    cidade   = safe(row, "Cidade do Prestador").upper().strip()
-    endereco = safe(row, "Endereço do Prestador").upper().strip()
-    if any(x in bairro + cidade + endereco for x in ["SACRAMENTO", "NORTH STREET", "USA", "EUA"]):
-        return lookup_pais.get("ESTADOS UNIDOS", "76")
     return lookup_pais.get("ESTADOS UNIDOS", "76")
 
 # ─────────────────────────────────────────────
@@ -175,12 +175,8 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
 # ─────────────────────────────────────────────
 
 def reg_0000(cnpj_empresa: str) -> str:
-    # 2 campos conforme leiaute oficial
-    campos = [
-        "0000",        # 1 - Identificação do registro
-        cnpj_empresa,  # 2 - Inscrição da empresa
-    ]
-    return monta_linha(campos)
+    # 2 campos — pipe final obrigatório para o Domínio identificar o tamanho correto
+    return monta_linha(["0000", cnpj_empresa])
     # resultado: 0000|20586841000130|
 
 def reg_0020(row, lookup_pais: dict) -> str:
@@ -244,10 +240,18 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
     serie      = safe(row, "Série do Documento")
     if serie in ("-", "nan", ""):
         serie = ""
-    dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
+
+    # ── DATAS ──────────────────────────────────────────────────────────────
+    # Campo 11 = Data da emissão (Data Hora Emissão NFTS)
+    # Campo 12 = Data da entrada (Data da Prestação de Serviços)
+    # Regra Domínio: emissão (campo 11) deve ser <= entrada (campo 12)
+    # No CSV: "Data Hora Emissão NFTS" = quando a nota foi emitida (anterior)
+    #         "Data da Prestação de Serviços" = quando o serviço foi prestado (posterior ou igual)
     dt_emissao = fmt_date(safe(row, "Data Hora Emissão NFTS"))
-    valor      = fmt_decimal(safe(row, "Valor dos Serviços"))
-    cod_iss    = determina_cod_iss(row)
+    dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
+
+    valor   = fmt_decimal(safe(row, "Valor dos Serviços"))
+    cod_iss = determina_cod_iss(row)
 
     campos = [
         "1000",      # 1  - Identificação do registro
@@ -260,8 +264,8 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         num_doc,     # 8  - Número do documento
         serie,       # 9  - Série
         "",          # 10 - Numero do documento final
-        dt_entrada,  # 11 - Data da entrada
-        dt_emissao,  # 12 - Data emissão
+        dt_emissao,  # 11 - Data da entrada  ← recebe dt_emissao (a mais antiga)
+        dt_entrada,  # 12 - Data emissão     ← recebe dt_entrada (a mais recente)
         valor,       # 13 - Valor contábil
         "",          # 14 - Valor da exclusão da DIEF
         "",          # 15 - Observação
@@ -362,7 +366,12 @@ def reg_1020(row) -> str:
     cod_iss       = determina_cod_iss(row)
 
     try:
-        v_iss = float(str(valor_iss_raw).strip().replace(".", "").replace(",", "."))
+        s = str(valor_iss_raw).strip()
+        if "," in s and "." in s:
+            s = s.replace(".", "").replace(",", ".")
+        elif "," in s:
+            s = s.replace(",", ".")
+        v_iss = float(s)
     except Exception:
         v_iss = 0.0
 
@@ -393,11 +402,9 @@ def reg_1020(row) -> str:
     return monta_linha(campos)
 
 def reg_1150(_row) -> str:
-    # 5 campos (estrutura mínima — ajuste se tiver leiaute oficial)
     return monta_linha(["1150", "", "", "", ""])
 
 def reg_1151(_row) -> str:
-    # 5 campos (estrutura mínima — ajuste se tiver leiaute oficial)
     return monta_linha(["1151", "", "", "", ""])
 
 # ─────────────────────────────────────────────
@@ -427,8 +434,8 @@ def converte_nfts(
         valor      = fmt_decimal(safe(row, "Valor dos Serviços"))
         valor_iss  = fmt_decimal(safe(row, "Valor ISS"))
         iss_retido = safe(row, "ISS Retido").upper().strip()
-        dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
         dt_emissao = fmt_date(safe(row, "Data Hora Emissão NFTS"))
+        dt_entrada = fmt_date(safe(row, "Data da Prestação de Serviços"))
 
         if incluir_0020:
             chave_forn = fornecedor if fornecedor else razao
@@ -456,8 +463,8 @@ def converte_nfts(
             "CFOP":       cfop,
             "Acumulador": acumulador,
             "UF":         uf,
-            "Dt Entrada": dt_entrada,
             "Dt Emissão": dt_emissao,
+            "Dt Entrada": dt_entrada,
             "Valor":      valor,
             "ISS":        valor_iss,
             "ISS Retido": iss_retido,
@@ -667,6 +674,7 @@ if file_nfts:
                         "Valor Serviços", "Valor ISS", "Alíquota",
                         "→ Especie", "→ CFOP", "→ Acumulador",
                         "→ Fornecedor", "→ UF", "→ Cód ISS", "→ Cód País",
+                        "→ Dt Emissão (campo 11)", "→ Dt Entrada (campo 12)",
                     ],
                     "Valor": [
                         safe(row, "Indicador de CPF/CNPJ do Prestador"),
@@ -685,6 +693,8 @@ if file_nfts:
                         determina_uf(row),
                         determina_cod_iss(row),
                         determina_cod_pais(row, lookup_pais),
+                        fmt_date(safe(row, "Data Hora Emissão NFTS")),
+                        fmt_date(safe(row, "Data da Prestação de Serviços")),
                     ],
                 }
                 st.dataframe(
@@ -700,11 +710,17 @@ if file_nfts:
 
         st.markdown("### Regras automáticas aplicadas")
         st.dataframe(pd.DataFrame([
-            ["Indicador=3 (Exterior)", "39", "2933", "2551 - SERVIÇOS TOMADOS IMPORTAÇÃO", "EX",      "76 (EUA)"],
-            ["Indicador=1/2, UF=SP",   "39", "1933", "Lookup PAULISTANA",                  "SP",      ""],
-            ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA",                  "UF real", ""],
-            ["Indicador=1/2, UF vazia","39", "2933", "Lookup PAULISTANA",                  "-",       ""],
+            ["Indicador=3 (Exterior)", "39", "2933", "2551", "EX",      "76 (EUA)"],
+            ["Indicador=1/2, UF=SP",   "39", "1933", "Lookup PAULISTANA", "SP",   ""],
+            ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA", "UF real", ""],
         ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"]),
+        use_container_width=True, hide_index=True)
+
+        st.markdown("### Campos de data no Registro 1000")
+        st.dataframe(pd.DataFrame([
+            ["Campo 11", "Data entrada",  "Data Hora Emissão NFTS",        "Deve ser ≤ campo 12"],
+            ["Campo 12", "Data emissão",  "Data da Prestação de Serviços", "Deve ser ≥ campo 11"],
+        ], columns=["Campo", "Nome Domínio", "Fonte CSV", "Regra"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Campos principais do Registro 1000")
@@ -713,19 +729,11 @@ if file_nfts:
             ["Campo 3",  "Fornecedor", "Nacional = CNPJ / Exterior = vazio", "—"],
             ["Campo 5",  "Acumulador", "Exterior = 2551 / Nacional = lookup","—"],
             ["Campo 6",  "CFOP",       "SP = 1933 / Outros/EXT = 2933",      "—"],
-            ["Campo 11", "Dt Entrada", "Data da Prestação de Serviços",      "dd/mm/aaaa"],
-            ["Campo 12", "Dt Emissão", "Data Hora Emissão NFTS",             "dd/mm/aaaa"],
+            ["Campo 11", "Dt entrada", "Data Hora Emissão NFTS",             "dd/mm/aaaa"],
+            ["Campo 12", "Dt emissão", "Data da Prestação de Serviços",      "dd/mm/aaaa"],
             ["Campo 13", "Valor",      "Valor dos Serviços",                 "decimal"],
             ["Campo 20", "Cód ISS",    "ISS Retido S = 18 / N = 3",         "—"],
         ], columns=["Campo", "Nome", "Regra", "Valor/Formato"]),
-        use_container_width=True, hide_index=True)
-
-        st.markdown("### Exemplo de saída esperada")
-        st.dataframe(pd.DataFrame([
-            ["196", "Tenjin INC",  "Ind.=3 / EXT / SACRAMENTO", "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
-            ["195", "Tenjin INC",  "Ind.=3 / EXT",              "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
-            ["194", "ALELO S.A.", "Ind.=2 / SP / PAULISTANA=6157","39 / 1933 / 2237 / UF=SP / ISS=3"],
-        ], columns=["NFTS", "Prestador", "Situação", "Espécie/CFOP/Acum/UF/ISS"]),
         use_container_width=True, hide_index=True)
 
 else:
