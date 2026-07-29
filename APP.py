@@ -33,36 +33,30 @@ def safe(row, col, default=""):
 
 def fmt_decimal(value, casas=2):
     """
-    Converte valor monetário para o formato Domínio Sistemas.
-    Regra oficial: campo Decimal(2) → remover separadores e manter dígitos.
-    Ex.: 1.747,85 → 174785
-         1747.85  → 174785
-         1747,85  → 174785
-         50,68    → 5068
-         2,90     → 290
+    Converte valor para formato Domínio Sistemas (Decimal com N casas).
+    Regra oficial: remover separadores e manter dígitos × 10^casas.
+    Exemplos:
+      1.747,85  → 174785   (ponto=milhar, vírgula=decimal)
+      1747.85   → 174785   (ponto=decimal)
+      1747,85   → 174785   (vírgula=decimal)
+      2,90      → 290      (alíquota)
+      50,68     → 5068     (ISS)
     """
     try:
         s = str(value).strip()
         if not s or s in ("nan", ""):
-            return "0" * (casas + 1)  # ex: "000" para casas=2
-
-        # Remove todos os separadores (ponto e vírgula)
-        # e converte para float para garantir o valor correto
-        # depois multiplica por 10^casas e converte para inteiro
+            return "0"
+        # ponto E vírgula → ponto=milhar, vírgula=decimal
         if "," in s and "." in s:
-            # 1.747,85 → ponto=milhar, vírgula=decimal
             s = s.replace(".", "").replace(",", ".")
+        # só vírgula → vírgula=decimal
         elif "," in s:
-            # 1747,85 → vírgula=decimal
             s = s.replace(",", ".")
-        # se só ponto → já é decimal padrão
-
+        # só ponto → ponto=decimal (não mexe)
         v = float(s)
-        # Multiplica pelo fator de casas decimais e arredonda
-        v_int = round(v * (10 ** casas))
-        return str(int(v_int))
+        return str(int(round(v * (10 ** casas))))
     except Exception:
-        return "0" * (casas + 1)
+        return "0"
 
 def fmt_date(value):
     if not value or str(value).strip() in ("", "nan"):
@@ -89,7 +83,11 @@ def limpa_numero(value):
         return str(value).strip()
 
 def monta_linha(campos: list) -> str:
-    """Une campos com pipe E adiciona pipe final — fecha o último campo."""
+    """
+    Une campos com pipe E adiciona pipe final.
+    Regra: todo pipe que abre tem que fechar.
+    N campos = N-1 pipes internos + 1 pipe final = N pipes total.
+    """
     return "|".join([str(c) for c in campos]) + "|"
 
 # ─────────────────────────────────────────────
@@ -181,19 +179,29 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
     return lookup_pais.get("ESTADOS UNIDOS", "76")
 
 # ─────────────────────────────────────────────
-# MONTA REGISTROS
-# Leiaute: 0000=2 | 0020=33 | 1000=98 | 1020=19 campos
-# Todos terminam com pipe final (fecha o último campo)
-# Decimais: formato Domínio = inteiro sem separador (ex: 174785 = 1747,85)
+# MONTA REGISTROS — conforme leiautes oficiais
+#
+# 0000 → 2 campos  → 2 pipes  (1 interno + 1 final)
+# 0020 → 33 campos → 33 pipes (32 internos + 1 final)
+# 1000 → 98 campos → 98 pipes (97 internos + 1 final)
+# 1020 → 19 campos → 19 pipes (18 internos + 1 final)
+#
+# Decimais: formato Domínio = inteiro sem separador
+#   1747,85 → 174785  |  2,90 → 290  |  50,68 → 5068
 # ─────────────────────────────────────────────
 
 def reg_0000(cnpj_empresa: str) -> str:
-    # 2 campos — pipe final obrigatório
-    return monta_linha(["0000", cnpj_empresa])
+    # Leiaute: 2 campos
+    # Campo 1: Fixo "0000"
+    # Campo 2: CNPJ/CPF/CEI/CAEPF da empresa (só números)
+    return monta_linha([
+        "0000",        # 1 - Identificação do registro
+        cnpj_empresa,  # 2 - Inscrição da empresa
+    ])
     # resultado: 0000|20586841000130|
 
 def reg_0020(row, lookup_pais: dict) -> str:
-    # 33 campos conforme leiaute oficial
+    # Leiaute: 33 campos (verificado campo a campo)
     ind_num     = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     fornecedor  = determina_fornecedor(row)
     razao       = safe(row, "Razão Social do Prestador")[:150]
@@ -207,17 +215,17 @@ def reg_0020(row, lookup_pais: dict) -> str:
     email       = safe(row, "Email do Prestador")
 
     campos = [
-        "0020",      # 1  - Identificação do registro
-        fornecedor,  # 2  - Inscrição (CNPJ/CPF/CEI/CAEPF) — só números
-        razao,       # 3  - Razão Social (max 150)
-        "",          # 4  - Apelido (max 40)
+        "0020",      # 1  - Identificação do registro (fixo)
+        fornecedor,  # 2  - Inscrição CNPJ/CPF/CEI/CAEPF (só números)
+        razao,       # 3  - Razão Social (max 150 chars)
+        "",          # 4  - Apelido (max 40 chars)
         endereco,    # 5  - Endereço
         numero_end,  # 6  - Número do endereço (numérico)
         complemento, # 7  - Complemento
         bairro,      # 8  - Bairro
-        "",          # 9  - Código do município (numérico)
+        "",          # 9  - Código do município (numérico: estadual/federal/IBGE/RAIS)
         uf,          # 10 - UF (EX para exterior)
-        cod_pais,    # 11 - Código do País (só exterior)
+        cod_pais,    # 11 - Código do País (numérico, só exterior)
         cep,         # 12 - CEP
         "",          # 13 - Inscrição Estadual
         "",          # 14 - Inscrição Municipal
@@ -233,18 +241,20 @@ def reg_0020(row, lookup_pais: dict) -> str:
         "",          # 24 - Regime de apuração (N/M/E/O/U/I)
         "",          # 25 - Contribuinte ICMS (S/N)
         "",          # 26 - Alíquota ICMS (decimal)
-        "",          # 27 - Categoria do estabelecimento
+        "",          # 27 - Categoria do estabelecimento (ARM/CNF/CPQ/DIS/...)
         "",          # 28 - Inscrição Estadual ST
         email,       # 29 - Email
         "",          # 30 - Interdependência com a empresa (S/N)
         "",          # 31 - Contribuinte da CPRB (S/N)
-        "",          # 32 - Processo administrativo/judicial (max 21)
+        "",          # 32 - Processo administrativo/judicial (max 21 chars)
         "",          # 33 - Tipo Inscrição (1=CAEPF)
     ]
+    # Verifica contagem: deve ser exatamente 33
+    assert len(campos) == 33, f"reg_0020: esperado 33 campos, encontrado {len(campos)}"
     return monta_linha(campos)
 
 def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
-    # 98 campos conforme leiaute oficial
+    # Leiaute: 98 campos (verificado campo a campo)
     especie    = determina_especie(row)
     fornecedor = determina_fornecedor(row)
     acumulador = determina_acumulador(row, lookup_acum)
@@ -254,21 +264,20 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
     if serie in ("-", "nan", ""):
         serie = ""
 
-    # ── DATAS ──────────────────────────────────────────────────────────────
-    # Campo 11 = Data da entrada  → Data Hora Emissão NFTS (a mais antiga)
-    # Campo 12 = Data emissão     → Data da Prestação de Serviços (a mais recente)
+    # DATAS:
+    # Campo 11 = Data da entrada → recebe Data Hora Emissão NFTS (mais antiga)
+    # Campo 12 = Data emissão    → recebe Data da Prestação de Serviços (mais recente)
     # Regra Domínio: campo 11 (entrada) deve ser <= campo 12 (emissão)
     dt_campo11 = fmt_date(safe(row, "Data Hora Emissão NFTS"))
     dt_campo12 = fmt_date(safe(row, "Data da Prestação de Serviços"))
 
-    # ── VALOR ──────────────────────────────────────────────────────────────
-    # Regra oficial Domínio: Decimal(2) → inteiro sem separador
+    # VALOR: Decimal(2) → inteiro sem separador
     # Ex.: 1747,85 → 174785
     valor   = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
     cod_iss = determina_cod_iss(row)
 
     campos = [
-        "1000",      # 1  - Identificação do registro
+        "1000",      # 1  - Identificação do registro (fixo)
         especie,     # 2  - Código da espécie (numérico)
         fornecedor,  # 3  - Inscrição fornecedor (CNPJ/CPF/CEI/CAEPF)
         "",          # 4  - Código de Exclusão da DIEF (numérico)
@@ -301,7 +310,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 31 - Valor do COFINS (decimal 2)
         "",          # 32 - Valor DARE (decimal 2, só SE)
         "",          # 33 - Alíquota DARE (decimal 2, só SE)
-        "",          # 34 - Valor base ICMS ST (numérico)
+        "",          # 34 - Valor base ICMS ST (numérico: 0/1/2)
         "",          # 35 - Entradas cuja saída é isenta (decimal 2, só MG)
         "",          # 36 - Outras entradas isentas (decimal 2, só MG)
         "",          # 37 - Valor transporte incluído na base (decimal 2, só MG)
@@ -363,15 +372,17 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 93 - Classificação EFD-Reinf indicativo (0/1/2)
         "",          # 94 - Número do documento de arrecadação (max 255, só RS)
         "",          # 95 - Tipo do título (0-3/99)
-        "",          # 96 - Identificação (max 255)
+        "",          # 96 - Identificação (max 255 chars)
         "",          # 97 - ICMS Desonerado (decimal 2)
         "",          # 98 - IPI Devolução (decimal 2)
     ]
+    assert len(campos) == 98, f"reg_1000: esperado 98 campos, encontrado {len(campos)}"
     return monta_linha(campos)
 
 def reg_1020(row) -> str:
-    # 19 campos conforme leiaute oficial
+    # Leiaute: 19 campos (verificado campo a campo)
     # Decimais: formato Domínio → inteiro sem separador
+    # Alíquota campo 5: Decimal(2) para ISS (não é IRRFP que usa 3 casas)
     iss_retido    = safe(row, "ISS Retido").upper().strip()
     valor_iss_raw = safe(row, "Valor ISS")
     aliquota_raw  = safe(row, "Alíquota")
@@ -381,7 +392,7 @@ def reg_1020(row) -> str:
     valor_iss  = fmt_decimal(valor_iss_raw, casas=2)
     aliquota   = fmt_decimal(aliquota_raw, casas=2)
 
-    # Verifica se há ISS a lançar (usando valor float para comparar com zero)
+    # Verifica se há ISS a lançar
     try:
         s = str(valor_iss_raw).strip()
         if "," in s and "." in s:
@@ -396,11 +407,11 @@ def reg_1020(row) -> str:
         return ""
 
     campos = [
-        "1020",     # 1  - Identificação do registro
+        "1020",     # 1  - Identificação do registro (fixo)
         cod_iss,    # 2  - Código do imposto (numérico)
         "",         # 3  - Percentual de redução da base de cálculo (decimal 2)
         valor_serv, # 4  - Base de cálculo (decimal 2) → ex: 174785
-        aliquota,   # 5  - Alíquota (decimal 2) → ex: 290 = 2,90%
+        aliquota,   # 5  - Alíquota (decimal 2 para ISS) → ex: 290 = 2,90%
         valor_iss,  # 6  - Valor do Imposto (decimal 2) → ex: 5068
         "",         # 7  - Valor de Isentas (decimal 2)
         "",         # 8  - Valor de Outras (decimal 2)
@@ -410,12 +421,13 @@ def reg_1020(row) -> str:
         "",         # 12 - Código do recolhimento do imposto (caractere)
         "",         # 13 - Valor não tributadas (decimal 2, só GO)
         "",         # 14 - Valor parcela reduzida (decimal 2, só GO)
-        "",         # 15 - Alíq. Interest. (numérico/decimal)
-        "",         # 16 - Nat. rend. (numérico, max 5)
-        "",         # 17 - Tipo de Dedução (numérico, max 1)
-        "",         # 18 - Tipo de Isenção (numérico, max 2)
-        "",         # 19 - Descrição (caractere, max 100)
+        "",         # 15 - Alíq. Interest. (numérico/decimal, só RS/SP)
+        "",         # 16 - Nat. rend. (numérico max 5, só impostos específicos)
+        "",         # 17 - Tipo de Dedução (numérico max 1, só 63-IRRF-APF)
+        "",         # 18 - Tipo de Isenção (numérico max 2, só 63-IRRF-APF)
+        "",         # 19 - Descrição (caractere max 100)
     ]
+    assert len(campos) == 19, f"reg_1020: esperado 19 campos, encontrado {len(campos)}"
     return monta_linha(campos)
 
 def reg_1150(_row) -> str:
@@ -499,16 +511,13 @@ def converte_nfts(
 st.set_page_config(page_title="Conversor NFTS", layout="wide")
 st.title("📄 Conversor NFTS → Arquivo de Importação")
 
-# ── Sidebar ──────────────────────────────────
 with st.sidebar:
     st.header("⚙️ Configurações")
-
     cnpj_empresa = st.text_input(
         "CNPJ da Empresa (só números)",
         value="20586841000130",
         max_chars=14,
     )
-
     st.markdown("---")
     st.subheader("Registros a gerar")
     incluir_0000 = st.checkbox("Reg. 0000 (Empresa)",    value=True)
@@ -516,7 +525,6 @@ with st.sidebar:
     incluir_1020 = st.checkbox("Reg. 1020 (ISS)",        value=True)
     incluir_1150 = st.checkbox("Reg. 1150 (IVA/IBS)",    value=False)
     incluir_1151 = st.checkbox("Reg. 1151 (IVA/CBS)",    value=False)
-
     st.markdown("---")
     st.info(
         "**Regras aplicadas:**\n\n"
@@ -526,10 +534,9 @@ with st.sidebar:
         "**ISS** — Cód.18 (retido) / Cód.3 (normal)\n\n"
         "**Fornecedor** — CNPJ (nacional) / vazio (exterior)\n\n"
         "**UF** — EX (exterior) / UF real (nacional)\n\n"
-        "**Decimais** — formato Domínio: 1747,85 → 174785"
+        "**Decimais** — Domínio: 1747,85 → 174785"
     )
 
-# ── Carrega Acumuladores e Países do GitHub ──
 with st.spinner("🔄 Carregando tabelas de referência do GitHub..."):
     try:
         lookup_acum = carrega_acumuladores_github(URL_ACUMULADORES)
@@ -540,24 +547,17 @@ with st.spinner("🔄 Carregando tabelas de referência do GitHub..."):
             f"_(carregados do GitHub)_"
         )
     except Exception as e:
-        st.error(
-            f"❌ Erro ao carregar arquivos do GitHub:\n\n`{e}`\n\n"
-            "Verifique se o repositório é público e os arquivos existem na branch `main`."
-        )
+        st.error(f"❌ Erro ao carregar arquivos do GitHub:\n\n`{e}`")
         st.stop()
 
-# ── Upload apenas do CSV NFTS ─────────────────
 st.subheader("📂 Upload do Arquivo NFTS")
-
 file_nfts = st.file_uploader(
     "CSV NFTS — exportado do portal NFTS da Prefeitura de SP",
     type=["csv"],
     key="nfts",
 )
 
-# ── Processamento ─────────────────────────────
 if file_nfts:
-
     try:
         df_nfts = pd.read_csv(file_nfts, sep=",", dtype=str, encoding="utf-8")
     except Exception:
@@ -572,10 +572,7 @@ if file_nfts:
 
     col_tipo = "Tipo de Registro"
     if col_tipo not in df_nfts.columns:
-        st.error(
-            f"Coluna '{col_tipo}' não encontrada no CSV.\n\n"
-            f"Colunas encontradas: `{list(df_nfts.columns)}`"
-        )
+        st.error(f"Coluna '{col_tipo}' não encontrada.\n\nColunas: `{list(df_nfts.columns)}`")
         st.stop()
 
     df_notas = df_nfts[df_nfts[col_tipo].str.strip().str.upper() == "4"].copy()
@@ -585,7 +582,7 @@ if file_nfts:
         st.stop()
 
     st.success(
-        f"✅ {len(df_notas)} nota(s) carregada(s) | "
+        f"✅ {len(df_notas)} nota(s) | "
         f"{len(lookup_acum)} acumuladores | "
         f"{len(lookup_pais)} países"
     )
@@ -599,10 +596,8 @@ if file_nfts:
         incluir_0000, incluir_0020, incluir_1020, incluir_1150, incluir_1151,
     )
 
-    # ── TAB 1: PREVIEW ────────────────────────
     with tab1:
         st.subheader("Preview das Notas")
-
         if not df_prev.empty:
             n_ret   = len(df_prev[df_prev["ISS Retido"] == "S"])
             n_nor   = len(df_prev[df_prev["ISS Retido"] != "S"])
@@ -631,7 +626,6 @@ if file_nfts:
                 df_prev.style.apply(highlight_row, axis=1),
                 use_container_width=True,
             )
-
             col_l1, col_l2, col_l3 = st.columns(3)
             col_l1.markdown(
                 "<span style='background:#d4edda;padding:2px 8px;border-radius:4px'>"
@@ -643,13 +637,10 @@ if file_nfts:
                 "<span style='background:#f8d7da;padding:2px 8px;border-radius:4px'>"
                 "🔴 Vermelho = Acumulador não mapeado</span>", unsafe_allow_html=True)
 
-    # ── TAB 2: ARQUIVO GERADO ─────────────────
     with tab2:
         st.subheader("Arquivo de Importação Gerado")
-
         if conteudo:
             st.code(conteudo, language="text")
-
             nome_arquivo = f"importacao_nfts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
             st.download_button(
                 label="⬇️ Baixar arquivo .txt",
@@ -657,27 +648,25 @@ if file_nfts:
                 file_name=nome_arquivo,
                 mime="text/plain",
             )
-
             avisos = [l for l in conteudo.splitlines() if "AVISO" in l]
             if avisos:
                 st.warning(f"⚠️ {len(avisos)} linha(s) com acumulador não mapeado:")
                 for a in avisos:
                     st.code(a)
 
-    # ── TAB 3: DEBUG ──────────────────────────
     with tab3:
         st.subheader("🔍 Debug — Dados Carregados")
 
         with st.expander("CSV NFTS — Dados brutos"):
             st.dataframe(df_notas, use_container_width=True)
 
-        with st.expander(f"Acumuladores carregados do GitHub ({len(lookup_acum)} itens)"):
+        with st.expander(f"Acumuladores ({len(lookup_acum)} itens)"):
             st.dataframe(
                 pd.DataFrame(list(lookup_acum.items()), columns=["PAULISTANA", "Acumulador"]),
                 use_container_width=True,
             )
 
-        with st.expander(f"Países carregados do GitHub ({len(lookup_pais)} itens)"):
+        with st.expander(f"Países ({len(lookup_pais)} itens)"):
             st.dataframe(
                 pd.DataFrame(list(lookup_pais.items()), columns=["Nome", "Código"]),
                 use_container_width=True,
@@ -745,7 +734,6 @@ if file_nfts:
                 )
                 st.markdown("---")
 
-    # ── TAB 4: AJUDA ──────────────────────────
     with tab4:
         st.subheader("❓ Ajuda — Regras de Importação")
 
@@ -762,15 +750,15 @@ if file_nfts:
             ["1.747,85", "ponto=milhar, vírgula=decimal", "174785"],
             ["1747.85",  "ponto=decimal",                 "174785"],
             ["1747,85",  "vírgula=decimal",               "174785"],
-            ["2,90",     "vírgula=decimal (alíquota)",    "290"],
-            ["50,68",    "vírgula=decimal (ISS)",         "5068"],
+            ["2,90",     "alíquota ISS",                  "290"],
+            ["50,68",    "valor ISS",                     "5068"],
         ], columns=["Valor no CSV", "Interpretação", "Resultado no arquivo"]),
         use_container_width=True, hide_index=True)
 
         st.markdown("### Lógica das datas no Registro 1000")
         st.dataframe(pd.DataFrame([
-            ["Campo 11", "Data da entrada", "Data Hora Emissão NFTS",        "Mais antiga — deve ser ≤ campo 12"],
-            ["Campo 12", "Data emissão",    "Data da Prestação de Serviços", "Mais recente — deve ser ≥ campo 11"],
+            ["Campo 11", "Data da entrada", "Data Hora Emissão NFTS",        "Mais antiga ≤ campo 12"],
+            ["Campo 12", "Data emissão",    "Data da Prestação de Serviços", "Mais recente ≥ campo 11"],
         ], columns=["Campo", "Nome Domínio", "Fonte no CSV", "Regra"]),
         use_container_width=True, hide_index=True)
 
@@ -783,7 +771,7 @@ if file_nfts:
             ["Campo 11", "Dt entrada",  "Data Hora Emissão NFTS",             "dd/mm/aaaa"],
             ["Campo 12", "Dt emissão",  "Data da Prestação de Serviços",      "dd/mm/aaaa"],
             ["Campo 13", "Valor",       "Valor dos Serviços",                 "174785 = 1747,85"],
-            ["Campo 20", "Cód ISS",     "ISS Retido S = 18 / N = 3",         "—"],
+            ["Campo 20", "Cód ISS",     "ISS Retido S=18 / N=3",             "—"],
         ], columns=["Campo", "Nome", "Regra", "Exemplo"]),
         use_container_width=True, hide_index=True)
 
