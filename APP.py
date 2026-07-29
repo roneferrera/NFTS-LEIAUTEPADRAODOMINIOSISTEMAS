@@ -18,7 +18,7 @@ COD_ISS_NORMAL      = "3"
 # ─────────────────────────────────────────────
 # URLs DOS ARQUIVOS NO GITHUB
 # ─────────────────────────────────────────────
-GITHUB_RAW_BASE  = "https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPO/main"
+GITHUB_RAW_BASE  = "https://raw.githubusercontent.com/roneferrera/NFTS-LEIAUTEPADRAODOMINIOSISTEMAS/main"
 URL_ACUMULADORES = f"{GITHUB_RAW_BASE}/Acumuladores.xlsx"
 URL_PAISES       = f"{GITHUB_RAW_BASE}/Pa%C3%ADses.xlsx"
 
