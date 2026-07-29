@@ -63,6 +63,10 @@ def limpa_numero(value):
     except Exception:
         return str(value).strip()
 
+def monta_linha(campos: list) -> str:
+    """Junta campos com pipe E adiciona pipe final para fechar o último campo."""
+    return "|".join(campos) + "|"
+
 # ─────────────────────────────────────────────
 # CARREGA ACUMULADORES DO EXCEL
 # ─────────────────────────────────────────────
@@ -166,11 +170,20 @@ def determina_cod_pais(row, lookup_pais: dict) -> str:
 
 # ─────────────────────────────────────────────
 # MONTA REGISTROS
+# Leiaute: 0000=2 campos | 0020=33 | 1000=98 | 1020=19
+# Todos os registros terminam com pipe (pipe final fecha o último campo)
 # ─────────────────────────────────────────────
+
 def reg_0000(cnpj_empresa: str) -> str:
-    return "|".join(["0000", cnpj_empresa])
+    # 2 campos conforme leiaute oficial
+    campos = [
+        "0000",       # campo 1 - Identificação do registro
+        cnpj_empresa, # campo 2 - Inscrição da empresa
+    ]
+    return monta_linha(campos)  # gera: 0000|20586841000130|
 
 def reg_0020(row, lookup_pais: dict) -> str:
+    # 33 campos conforme leiaute oficial
     ind_num     = re.sub(r"\.0$", "", safe(row, "Indicador de CPF/CNPJ do Prestador")).strip()
     fornecedor  = determina_fornecedor(row)
     razao       = safe(row, "Razão Social do Prestador")[:150]
@@ -184,14 +197,44 @@ def reg_0020(row, lookup_pais: dict) -> str:
     email       = safe(row, "Email do Prestador")
 
     campos = [
-        "0020", fornecedor, razao, "", endereco, numero_end,
-        complemento, bairro, "", uf, cod_pais, cep,
-        "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", email,
-        "", "", "", "",
+        "0020",      # 1  - Identificação do registro
+        fornecedor,  # 2  - Inscrição (CNPJ/CPF/CEI/CAEPF)
+        razao,       # 3  - Razão Social
+        "",          # 4  - Apelido
+        endereco,    # 5  - Endereço
+        numero_end,  # 6  - Número do endereço
+        complemento, # 7  - Complemento
+        bairro,      # 8  - Bairro
+        "",          # 9  - Código do município
+        uf,          # 10 - UF
+        cod_pais,    # 11 - Código do País
+        cep,         # 12 - CEP
+        "",          # 13 - Inscrição Estadual
+        "",          # 14 - Inscrição Municipal
+        "",          # 15 - Inscrição Suframa
+        "",          # 16 - DDD
+        "",          # 17 - Telefone
+        "",          # 18 - FAX
+        "",          # 19 - Data do cadastro
+        "",          # 20 - Conta contábil
+        "",          # 21 - Conta contábil cliente
+        "",          # 22 - Agropecuário
+        "",          # 23 - Natureza jurídica
+        "",          # 24 - Regime de apuração
+        "",          # 25 - Contribuinte ICMS
+        "",          # 26 - Alíquota ICMS
+        "",          # 27 - Categoria do estabelecimento
+        "",          # 28 - Inscrição Estadual ST
+        email,       # 29 - Email
+        "",          # 30 - Interdependência com a empresa
+        "",          # 31 - Contribuinte da CPRB
+        "",          # 32 - Processo administrativo/judicial
+        "",          # 33 - Tipo Inscrição
     ]
-    return "|".join(campos)
+    return monta_linha(campos)
 
 def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
+    # 98 campos conforme leiaute oficial
     especie    = determina_especie(row)
     fornecedor = determina_fornecedor(row)
     acumulador = determina_acumulador(row, lookup_acum)
@@ -206,16 +249,109 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
     cod_iss    = determina_cod_iss(row)
 
     campos = [
-        "1000", especie, fornecedor, "", acumulador, cfop, "",
-        num_doc, serie, "", dt_entrada, dt_emissao, valor, "", "", "", "", "", "",
-        cod_iss, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
-        "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
-        "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
-        "", "", "", "", "", "", "", "", "", "",
+        "1000",      # 1  - Identificação do registro
+        especie,     # 2  - Código da espécie
+        fornecedor,  # 3  - Inscrição fornecedor
+        "",          # 4  - Código de Exclusão da DIEF
+        acumulador,  # 5  - Código do acumulador
+        cfop,        # 6  - CFOP
+        "",          # 7  - Segmento
+        num_doc,     # 8  - Número do documento
+        serie,       # 9  - Série
+        "",          # 10 - Numero do documento final
+        dt_entrada,  # 11 - Data da entrada
+        dt_emissao,  # 12 - Data emissão
+        valor,       # 13 - Valor contábil
+        "",          # 14 - Valor da exclusão da DIEF
+        "",          # 15 - Observação
+        "",          # 16 - Modalidade do frete
+        "",          # 17 - Emitente da nota fiscal
+        "",          # 18 - CFOP estendido/detalhamento
+        "",          # 19 - Código da transferência de crédito
+        cod_iss,     # 20 - Código do Recolhimento do ISS Retido
+        "",          # 21 - Código do Recolhimento do IRRF
+        "",          # 22 - Código da observação
+        "",          # 23 - Data do visto
+        "",          # 24 - Fato gerador da CRF
+        "",          # 25 - Fato gerador do IRRF
+        "",          # 26 - Valor do frete
+        "",          # 27 - Valor do seguro
+        "",          # 28 - Valor das despesas
+        "",          # 29 - Valor do PIS
+        "",          # 30 - Código Antecipação Tributária
+        "",          # 31 - Valor do COFINS
+        "",          # 32 - Valor DARE
+        "",          # 33 - Alíquota DARE
+        "",          # 34 - Valor base ICMS ST
+        "",          # 35 - Entradas cuja saída é isenta
+        "",          # 36 - Outras entradas isentas
+        "",          # 37 - Valor transporte incluído na base
+        "",          # 38 - Código de ressarcimento
+        "",          # 39 - Valor produtos
+        "",          # 40 - Município Origem
+        "",          # 41 - Situação da Nota
+        "",          # 42 - Código da situação tributária
+        "",          # 43 - Sub serie
+        "",          # 44 - Inscrição estadual do fornecedor
+        "",          # 45 - Inscrição municipal do fornecedor
+        "",          # 46 - Código da operação e prestação
+        "",          # 47 - Valor a ser deduzido da receita tributável
+        "",          # 48 - Competência
+        "",          # 49 - Operação
+        "",          # 50 - Número do parecer fiscal
+        "",          # 51 - Data do parecer fiscal
+        "",          # 52 - Número da declaração de Importação
+        "",          # 53 - Possui benefício fiscal
+        "",          # 54 - Chave da nota fiscal eletrônica
+        "",          # 55 - Código de recolhimento do FETHAB
+        "",          # 56 - Responsável pelo recolhimento do FETHAB
+        "",          # 57 - CFOP documento fiscal
+        "",          # 58 - Tipo de CT-e
+        "",          # 59 - CT-e referência
+        "",          # 60 - Modalidade da importação
+        "",          # 61 - Código da informação complementar
+        "",          # 62 - Informação complementar
+        "",          # 63 - Classe de consumo
+        "",          # 64 - Tipo de ligação
+        "",          # 65 - Grupo de tensão
+        "",          # 66 - Tipo de assinante
+        "",          # 67 - KWH consumido
+        "",          # 68 - Valor fornecido/consumido
+        "",          # 69 - Valor cobrado de terceiros
+        "",          # 70 - Tipo do documento de importação
+        "",          # 71 - Número do Ato Concessório Drawback
+        "",          # 72 - Natureza do frete PIS/COFINS
+        "",          # 73 - CST PIS/COFINS
+        "",          # 74 - Base do crédito PIS/COFINS
+        "",          # 75 - Valor serviços/itens PIS/COFINS
+        "",          # 76 - Base de cálculo PIS/COFINS
+        "",          # 77 - Alíquota de PIS
+        "",          # 78 - Alíquota de COFINS
+        "",          # 79 - Chave de NFSe
+        "",          # 80 - Número do processo ou ato concessório
+        "",          # 81 - Origem do processo
+        "",          # 82 - Data da escrituração
+        "",          # 83 - CFPS
+        "",          # 84 - Natureza da receita PIS/COFINS
+        "",          # 85 - CST IPI
+        "",          # 86 - Lançamentos de SCP
+        "",          # 87 - Tipo de serviço
+        "",          # 88 - Município destino
+        "",          # 89 - Pedágio
+        "",          # 90 - IPI
+        "",          # 91 - ICMS ST
+        "",          # 92 - Classificação de Serviços EFD-Reinf (tipo)
+        "",          # 93 - Classificação de Serviços EFD-Reinf (indicativo)
+        "",          # 94 - Número do documento de arrecadação
+        "",          # 95 - Tipo do título
+        "",          # 96 - Identificação
+        "",          # 97 - ICMS Desonerado
+        "",          # 98 - IPI Devolução
     ]
-    return "|".join(campos)
+    return monta_linha(campos)
 
 def reg_1020(row) -> str:
+    # 19 campos conforme leiaute oficial
     iss_retido    = safe(row, "ISS Retido").upper().strip()
     valor_iss_raw = safe(row, "Valor ISS")
     aliquota_raw  = safe(row, "Alíquota")
@@ -233,16 +369,33 @@ def reg_1020(row) -> str:
         return ""
 
     campos = [
-        "1020", cod_iss, "", valor_serv, aliquota, valor_iss,
-        "", "", "", "", valor_serv, "", "", "", "", "", "", "", "",
+        "1020",     # 1  - Identificação do registro
+        cod_iss,    # 2  - Código do imposto
+        "",         # 3  - Percentual de redução da base de cálculo
+        valor_serv, # 4  - Base de cálculo
+        aliquota,   # 5  - Alíquota
+        valor_iss,  # 6  - Valor do Imposto
+        "",         # 7  - Valor de Isentas
+        "",         # 8  - Valor de Outras
+        "",         # 9  - Valor do IPI
+        "",         # 10 - Valor da substituição Tributária
+        valor_serv, # 11 - Valor Contábil
+        "",         # 12 - Código do recolhimento do imposto
+        "",         # 13 - Valor não tributadas
+        "",         # 14 - Valor parcela reduzida
+        "",         # 15 - Alíq. Interest.
+        "",         # 16 - Nat. rend.
+        "",         # 17 - Tipo de Dedução
+        "",         # 18 - Tipo de Isenção
+        "",         # 19 - Descrição
     ]
-    return "|".join(campos)
+    return monta_linha(campos)
 
 def reg_1150(_row) -> str:
-    return "|".join(["1150", "", "", "", ""])
+    return monta_linha(["1150", "", "", "", ""])
 
 def reg_1151(_row) -> str:
-    return "|".join(["1151", "", "", "", ""])
+    return monta_linha(["1151", "", "", "", ""])
 
 # ─────────────────────────────────────────────
 # PROCESSAMENTO PRINCIPAL
@@ -375,7 +528,6 @@ file_nfts = st.file_uploader(
 # ── Processamento ─────────────────────────────
 if file_nfts:
 
-    # Lê o CSV tentando separadores e encodings
     try:
         df_nfts = pd.read_csv(file_nfts, sep=",", dtype=str, encoding="utf-8")
     except Exception:
@@ -550,7 +702,7 @@ if file_nfts:
             ["Indicador=1/2, UF≠SP",   "39", "2933", "Lookup PAULISTANA",                  "UF real", ""],
             ["Indicador=1/2, UF vazia","39", "2933", "Lookup PAULISTANA",                  "-",       ""],
         ], columns=["Situação", "Espécie", "CFOP", "Acumulador", "UF", "Cód País"]),
-        use_container_width=True, hide_index=True)
+        use_container_True, hide_index=True)
 
         st.markdown("### Campos principais do Registro 1000")
         st.dataframe(pd.DataFrame([
@@ -565,7 +717,7 @@ if file_nfts:
         ], columns=["Campo", "Nome", "Regra", "Valor/Formato"]),
         use_container_width=True, hide_index=True)
 
-        st.markdown("### Exemplo de saída esperada com os dados reais")
+        st.markdown("### Exemplo de saída esperada")
         st.dataframe(pd.DataFrame([
             ["196", "Tenjin INC",  "Ind.=3 / EXT / SACRAMENTO", "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
             ["195", "Tenjin INC",  "Ind.=3 / EXT",              "39 / 2933 / 2551 / UF=EX / País=76 / ISS=18"],
