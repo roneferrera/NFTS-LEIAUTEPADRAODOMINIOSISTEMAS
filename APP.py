@@ -73,6 +73,18 @@ def monta_linha(campos: list) -> str:
     return "|".join([str(c) for c in campos]) + "|"
 
 # ─────────────────────────────────────────────
+# EXTRAI CNPJ DA EMPRESA DO CSV
+# ─────────────────────────────────────────────
+def extrai_cnpj_empresa(df_notas) -> str:
+    """Lê CPF/CNPJ do Tomador da primeira nota e retorna só números."""
+    for _, row in df_notas.iterrows():
+        val  = safe(row, "CPF/CNPJ do Tomador")
+        cnpj = limpa_cnpj(val)
+        if cnpj:
+            return cnpj
+    return ""
+
+# ─────────────────────────────────────────────
 # CARREGA ACUMULADORES DO EXCEL
 # ─────────────────────────────────────────────
 def _parse_acumuladores(file_bytes: bytes) -> dict:
@@ -189,6 +201,7 @@ def detecta_duplicatas(df_notas) -> pd.DataFrame:
 # ─────────────────────────────────────────────
 
 def reg_0000(cnpj_empresa: str) -> str:
+    # ✅ CNPJ vem do CSV (CPF/CNPJ do Tomador), não da sidebar
     return monta_linha([
         "0000",
         cnpj_empresa,
@@ -230,16 +243,16 @@ def reg_0020(row, lookup_pais: dict) -> str:
         "",          # 19
         "",          # 20
         "",          # 21
-        "N",         # 22 - Agropecuário
+        "N",         # 22
         "",          # 23
-        "N",         # 24 - Regime de apuração
-        "N",         # 25 - Contribuinte ICMS
+        "N",         # 24
+        "N",         # 25
         "",          # 26
         "",          # 27
         "",          # 28
         email,       # 29
         "",          # 30
-        "N",         # 31 - Contribuinte CPRB
+        "N",         # 31
         "",          # 32
         "",          # 33
     ]
@@ -258,8 +271,8 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
 
     # ✅ Ambos os campos de data usam "Data da Prestação de Serviços"
     dt_prestacao = fmt_date(safe(row, "Data da Prestação de Serviços"))
-    dt_campo11   = dt_prestacao  # Campo 11 - Data da entrada
-    dt_campo12   = dt_prestacao  # Campo 12 - Data emissão
+    dt_campo11   = dt_prestacao
+    dt_campo12   = dt_prestacao
 
     valor   = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
     cod_iss = determina_cod_iss(row)
@@ -303,7 +316,7 @@ def reg_1000(row, lookup_acum: dict, lookup_pais: dict) -> str:
         "",          # 36
         "",          # 37
         "",          # 38
-        valor,       # 39 - Valor produtos = Valor contábil
+        valor,       # 39
         "",          # 40
         "",          # 41
         "",          # 42
@@ -375,29 +388,27 @@ def reg_1020(row) -> str:
     valor_serv    = fmt_decimal(safe(row, "Valor dos Serviços"), casas=2)
 
     if iss_retido == "S":
-        # ✅ ISS Retido → alíquota do CSV | Campo 6 = valor ISS | Campo 8 vazio
         aliquota  = fmt_decimal(aliquota_raw, casas=2)
         valor_iss = fmt_decimal(valor_iss_raw, casas=2)
         campo6    = valor_iss
         campo8    = ""
     else:
-        # ✅ ISS Normal → alíquota ZERADA | Campo 6 vazio | Campo 8 = valor serviços
         aliquota = "0,00"
         campo6   = ""
         campo8   = valor_serv
 
     campos = [
         "1020",     # 1
-        cod_iss,    # 2  - 18=Retido / 3=Normal
+        cod_iss,    # 2
         "",         # 3
-        valor_serv, # 4  - Base de cálculo
-        aliquota,   # 5  ✅ Alíquota: CSV se Retido | 0,00 se Normal
+        valor_serv, # 4
+        aliquota,   # 5  ✅ 0,00 se ISS Normal
         campo6,     # 6  ✅ Valor Imposto (só ISS Retido)
         "",         # 7
-        campo8,     # 8  ✅ Valor Outras (ISS Normal = valor dos serviços)
+        campo8,     # 8  ✅ Valor Outras (ISS Normal)
         "",         # 9
         "",         # 10
-        valor_serv, # 11 - Valor Contábil
+        valor_serv, # 11
         "",         # 12
         "",         # 13
         "",         # 14
@@ -432,23 +443,19 @@ def converte_nfts(
         linhas.append(reg_0000(cnpj_empresa))
 
     for _, row in df_notas.iterrows():
-        especie    = determina_especie(row)
-        cfop       = determina_cfop(row)
-        acumulador = determina_acumulador(row, lookup_acum)
-        fornecedor = determina_fornecedor(row)
-        uf         = determina_uf(row)
-        cod_iss    = determina_cod_iss(row)
-        num_nfts   = safe(row, "Nº NFTS")
-        razao      = safe(row, "Razão Social do Prestador")
-        valor_raw  = safe(row, "Valor dos Serviços")
-        valor      = fmt_decimal(valor_raw, casas=2)
-        valor_iss  = fmt_decimal(safe(row, "Valor ISS"), casas=2)
-        iss_retido = safe(row, "ISS Retido").upper().strip()
-
-        # ✅ Ambas as datas do preview também usam Data da Prestação de Serviços
+        especie      = determina_especie(row)
+        cfop         = determina_cfop(row)
+        acumulador   = determina_acumulador(row, lookup_acum)
+        fornecedor   = determina_fornecedor(row)
+        uf           = determina_uf(row)
+        cod_iss      = determina_cod_iss(row)
+        num_nfts     = safe(row, "Nº NFTS")
+        razao        = safe(row, "Razão Social do Prestador")
+        valor_raw    = safe(row, "Valor dos Serviços")
+        valor        = fmt_decimal(valor_raw, casas=2)
+        valor_iss    = fmt_decimal(safe(row, "Valor ISS"), casas=2)
+        iss_retido   = safe(row, "ISS Retido").upper().strip()
         dt_prestacao = fmt_date(safe(row, "Data da Prestação de Serviços"))
-        dt_campo11   = dt_prestacao
-        dt_campo12   = dt_prestacao
 
         if incluir_0020:
             chave_forn = fornecedor if fornecedor else razao
@@ -474,8 +481,7 @@ def converte_nfts(
             "CFOP":           cfop,
             "Acumulador":     acumulador,
             "UF":             uf,
-            "C11-Dt Entrada": dt_campo11,
-            "C12-Dt Emissão": dt_campo12,
+            "C11/C12-Data":   dt_prestacao,
             "Valor (raw)":    valor_raw,
             "Valor (dom)":    valor,
             "ISS (dom)":      valor_iss,
@@ -494,12 +500,7 @@ st.title("📄 Conversor NFTS → Arquivo de Importação")
 
 with st.sidebar:
     st.header("⚙️ Configurações")
-    cnpj_empresa = st.text_input(
-        "CNPJ da Empresa (só números)",
-        value="20586841000130",
-        max_chars=14,
-    )
-    st.markdown("---")
+    # ✅ CNPJ removido da sidebar — vem do CSV automaticamente
     st.subheader("Registros a gerar")
     incluir_0000 = st.checkbox("Reg. 0000 (Empresa)",    value=True)
     incluir_0020 = st.checkbox("Reg. 0020 (Fornecedor)", value=True)
@@ -509,6 +510,7 @@ with st.sidebar:
     st.markdown("---")
     st.info(
         "**Regras aplicadas:**\n\n"
+        "**CNPJ empresa** — lido do CSV (CPF/CNPJ do Tomador) ✅\n\n"
         "**Especie** — 39 para todas as notas\n\n"
         "**CFOP** — 1933 (SP) / 2933 (outros/EXT)\n\n"
         "**Acumulador** — 2551 (exterior) / lookup PAULISTANA\n\n"
@@ -564,6 +566,10 @@ if file_nfts:
         st.warning("Nenhuma nota com Tipo de Registro = 4 encontrada no CSV.")
         st.stop()
 
+    # ✅ CNPJ extraído automaticamente do CSV
+    cnpj_empresa = extrai_cnpj_empresa(df_notas)
+    st.sidebar.info(f"🏢 CNPJ empresa (do CSV):\n\n`{cnpj_empresa}`")
+
     # ✅ Alerta de duplicatas
     df_dup = detecta_duplicatas(df_notas)
     if not df_dup.empty:
@@ -581,6 +587,7 @@ if file_nfts:
 
     st.success(
         f"✅ {len(df_notas)} nota(s) | "
+        f"CNPJ: {cnpj_empresa} | "
         f"{len(lookup_acum)} acumuladores | "
         f"{len(lookup_pais)} países"
     )
@@ -701,8 +708,8 @@ if file_nfts:
                         "→ UF",
                         "→ Cód ISS",
                         "→ Cód País",
-                        "→ C11 Data entrada",
-                        "→ C12 Data emissão",
+                        "→ C11/C12 Data (Prestação Serviços)",
+                        "→ CNPJ Empresa (0000)",
                     ],
                     "Valor": [
                         safe(row, "Indicador de CPF/CNPJ do Prestador"),
@@ -724,8 +731,8 @@ if file_nfts:
                         determina_uf(row),
                         determina_cod_iss(row),
                         determina_cod_pais(row, lookup_pais),
-                        fmt_date(safe(row, "Data da Prestação de Serviços")),  # ✅
-                        fmt_date(safe(row, "Data da Prestação de Serviços")),  # ✅
+                        fmt_date(safe(row, "Data da Prestação de Serviços")),
+                        cnpj_empresa,  # ✅ exibe o CNPJ extraído do CSV
                     ],
                 }
                 st.dataframe(
@@ -762,30 +769,17 @@ if file_nfts:
         ], columns=["Campo", "Nome Domínio", "Fonte CSV", "Status"]),
         use_container_width=True, hide_index=True)
 
+        st.markdown("### Reg. 0000 — CNPJ da Empresa ✅")
+        st.dataframe(pd.DataFrame([
+            ["Campo 2", "Inscrição da empresa", "CPF/CNPJ do Tomador (CSV)", "Automático ✅"],
+        ], columns=["Campo", "Nome", "Fonte", "Status"]),
+        use_container_width=True, hide_index=True)
+
         st.markdown("### Regra ISS — Registro 1020 ✅")
         st.dataframe(pd.DataFrame([
             ["ISS Retido (S)", "Cód.18", "do CSV",  "valor_iss",  '""',       "Campo 6 = Valor Imposto"],
             ["ISS Normal (N)", "Cód. 3", "0,00 ✅", '""',          "valor_serv","Campo 8 = Valor Outras"],
         ], columns=["Situação", "Cód ISS", "Alíquota C5", "Campo 6", "Campo 8", "Observação"]),
-        use_container_width=True, hide_index=True)
-
-        st.markdown("### Todas as correções aplicadas")
-        st.dataframe(pd.DataFrame([
-            ["fmt_decimal", "—",  "Formato decimal",    "×100 inteiro",  "vírgula decimal ✅"],
-            ["0020",        "4",  "Nome reduzido",       '""',            "razao[:40] ✅"],
-            ["0020",        "22", "Agropecuário",        '""',            '"N" ✅'],
-            ["0020",        "24", "Regime de apuração",  '""',            '"N" ✅'],
-            ["0020",        "25", "Contribuinte ICMS",   '""',            '"N" ✅'],
-            ["0020",        "31", "Contribuinte CPRB",   '""',            '"N" ✅'],
-            ["1000",        "11", "Data entrada",        "Emissão NFTS",  "Prestação Serviços ✅"],
-            ["1000",        "12", "Data emissão",        "Prestação Serv","Prestação Serviços ✅"],
-            ["1000",        "39", "Valor produtos",      '""',            "= campo 13 ✅"],
-            ["1020",        "5",  "Alíquota ISS Normal", "do CSV",        "0,00 ✅"],
-            ["1020",        "6",  "Valor Imposto",       "sempre",        "só ISS Retido ✅"],
-            ["1020",        "8",  "Valor Outras",        '""',            "ISS Normal = valor_serv ✅"],
-            ["1020",        "—",  "Geração",             "condicional",   "SEMPRE gerado ✅"],
-            ["—",           "—",  "Duplicatas",          "—",             "Alerta 🔴 ✅"],
-        ], columns=["Onde", "Campo", "Nome", "Antes", "Depois"]),
         use_container_width=True, hide_index=True)
 
 else:
