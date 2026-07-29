@@ -1,6 +1,6 @@
 """
 app.py — Conversor NFTS Paulistana → Domínio Sistemas
-Versão final — tudo em um único arquivo
+Versão 3.0 Final — arquivo único
 """
 
 import csv
@@ -16,7 +16,7 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 st.set_page_config(
     page_title="NFTS → Domínio Sistemas",
     page_icon="🧾",
-    layout="wide"
+    layout="wide",
 )
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -24,283 +24,283 @@ st.set_page_config(
 # Fonte: Países.xls (arquivo oficial Domínio)
 # Estrutura: ISO Alpha-2 → (Nome no Domínio, Código interno Domínio)
 # ════════════════════════════════════════════════════════════════════════════
-TABELA_PAISES: dict[str, tuple[str, str]] = {
-    "AF": ("AFEGANISTAO",                                        "1"),
-    "ZA": ("AFRICA DO SUL",                                      "2"),
-    "AL": ("ALBANIA, REPUBLICA DA",                              "3"),
-    "DE": ("ALEMANHA",                                           "4"),
-    "AD": ("ANDORRA",                                            "5"),
-    "AO": ("ANGOLA",                                             "6"),
-    "AI": ("ANGUILLA",                                           "7"),
-    "AG": ("ANTIGUA E BARBUDA",                                  "8"),
-    "AN": ("ANTILHAS HOLANDESAS",                                "9"),
-    "SA": ("ARABIA SAUDITA",                                     "10"),
-    "DZ": ("ARGELIA",                                            "11"),
-    "AR": ("ARGENTINA",                                          "12"),
-    "AM": ("ARMENIA, REPUBLICA DA",                              "13"),
-    "AW": ("ARUBA",                                              "14"),
-    "AU": ("AUSTRALIA",                                          "15"),
-    "AT": ("AUSTRIA",                                            "16"),
-    "AZ": ("AZERBAIJAO, REPUBLICA DO",                           "17"),
-    "BS": ("BAHAMAS, ILHAS",                                     "18"),
-    "BH": ("BAHREIN, ILHAS",                                     "19"),
-    "BD": ("BANGLADESH",                                         "20"),
-    "BB": ("BARBADOS",                                           "21"),
-    "BY": ("Belarus, República da",                              "22"),
-    "BE": ("BELGICA",                                            "23"),
-    "BZ": ("BELIZE",                                             "24"),
-    "BJ": ("BENIN",                                              "25"),
-    "BM": ("BERMUDAS",                                           "26"),
-    "BO": ("Bolívia, Estado Plurinacional da",                   "27"),
-    "BA": ("Bósnia-Herzegovina, República da",                   "28"),
-    "BW": ("BOTSUANA",                                           "29"),
-    "BR": ("BRASIL",                                             "30"),
-    "BN": ("BRUNEI",                                             "31"),
-    "BG": ("BULGARIA, REPUBLICA DA",                             "32"),
-    "BF": ("BURKINA FASO",                                       "33"),
-    "BI": ("BURUNDI",                                            "34"),
-    "BT": ("BUTAO",                                              "35"),
-    "CV": ("CABO VERDE, REPUBLICA DE",                           "36"),
-    "CM": ("CAMAROES",                                           "37"),
-    "KH": ("CAMBOJA",                                            "38"),
-    "CA": ("CANADA",                                             "39"),
-    "GG": ("GUERNSEY, ILHA DO CANAL (INCLUI ALDERNEY E SARK)",   "40"),
-    "IC": ("CANARIAS, ILHAS",                                    "41"),
-    "QA": ("CATAR",                                              "42"),
-    "KY": ("CAYMAN, ILHA",                                       "43"),
-    "KZ": ("CAZAQUISTAO, REPUBLICA DO",                          "44"),
-    "TD": ("CHADE",                                              "45"),
-    "CL": ("CHILE",                                              "46"),
-    "CN": ("CHINA, REPUBLICA POPULAR DA",                        "47"),
-    "CY": ("CHIPRE",                                             "48"),
-    "CX": ("CHRISTMAS, ILHA (NAVIDAD)",                          "49"),
-    "SG": ("Singapura",                                          "50"),
-    "CC": ("COCOS (KEELING), ILHAS",                             "51"),
-    "CO": ("COLOMBIA",                                           "52"),
-    "KM": ("COMORES, ILHAS",                                     "53"),
-    "CD": ("CONGO, REPUBLICA DEMOCRATICA DO",                    "54"),
-    "CG": ("CONGO, REPUBLICA DO",                                "55"),
-    "CK": ("COOK, ILHA",                                         "56"),
-    "KP": ("Coreia (do Norte), Rep. Pop. Democrática da",        "57"),
-    "KR": ("Coreia (do Sul), República da",                      "58"),
-    "CI": ("COSTA DO MARFIM",                                    "59"),
-    "CR": ("COSTA RICA",                                         "60"),
-    "KW": ("KUWAIT",                                             "61"),
-    "HR": ("CROACIA, REPUBLICA DA",                              "62"),
-    "CU": ("CUBA",                                               "63"),
-    "DK": ("DINAMARCA",                                          "64"),
-    "DJ": ("DJIBUTI",                                            "65"),
-    "DM": ("DOMINICA, ILHA",                                     "66"),
-    "EG": ("EGITO",                                              "67"),
-    "SV": ("EL SALVADOR",                                        "68"),
-    "AE": ("EMIRADOS ARABES UNIDOS",                             "69"),
-    "EC": ("EQUADOR",                                            "70"),
-    "ER": ("ERITREIA",                                           "71"),
-    "GB-SCT": ("ESCOCIA",                                        "72"),
-    "SK": ("ESLOVACA, REPUBLICA",                                "73"),
-    "SI": ("ESLOVENIA, REPUBLICA DA",                            "74"),
-    "ES": ("ESPANHA",                                            "75"),
-    "US": ("ESTADOS UNIDOS",                                     "76"),
-    "EE": ("ESTONIA, REPUBLICA DA",                              "77"),
-    "ET": ("ETIOPIA",                                            "78"),
-    "FK": ("FALKLAND (ILHAS MALVINAS)",                          "79"),
-    "FO": ("FEROE, ILHAS",                                       "80"),
-    "FJ": ("FIJI",                                               "81"),
-    "PH": ("FILIPINAS",                                          "82"),
-    "FI": ("FINLANDIA",                                          "83"),
-    "TW": ("FORMOSA (TAIWAN)",                                   "84"),
-    "FR": ("FRANCA",                                             "85"),
-    "GA": ("GABAO",                                              "86"),
-    "GB-WLS": ("GALES, PAIS DE",                                 "87"),
-    "GM": ("GAMBIA",                                             "88"),
-    "GH": ("GANA",                                               "89"),
-    "GE": ("GEORGIA, REPUBLICA DA",                              "90"),
-    "GI": ("GIBRALTAR",                                          "91"),
-    "GB": ("GRA-BRETANHA",                                       "92"),
-    "GD": ("GRANADA",                                            "93"),
-    "GR": ("GRECIA",                                             "94"),
-    "GL": ("GROENLANDIA",                                        "95"),
-    "GP": ("GUADALUPE",                                          "96"),
-    "GU": ("GUAM",                                               "97"),
-    "GT": ("GUATEMALA",                                          "98"),
-    "GY": ("GUIANA",                                             "99"),
-    "GF": ("GUIANA FRANCESA",                                    "100"),
-    "GN": ("GUINE",                                              "101"),
-    "GW": ("GUINE-BISSAU",                                       "102"),
-    "GQ": ("GUINE-EQUATORIAL",                                   "103"),
-    "HT": ("HAITI",                                              "104"),
-    "NL": ("Países Baixos (Holanda)",                            "105"),
-    "HN": ("HONDURAS",                                           "106"),
-    "HK": ("HONG KONG, REGIAO ADM. ESPECIAL",                    "107"),
-    "HU": ("HUNGRIA, REPUBLICA DA",                              "108"),
-    "YE": ("IEMEN",                                              "109"),
-    "IN": ("INDIA",                                              "110"),
-    "ID": ("INDONESIA",                                          "111"),
-    "GB-ENG": ("INGLATERRA",                                     "112"),
-    "IR": ("IRA, REPUBLICA ISLAMICA DO",                         "113"),
-    "IQ": ("IRAQUE",                                             "114"),
-    "IE": ("IRLANDA",                                            "115"),
-    "GB-NIR": ("IRLANDA DO NORTE",                               "116"),
-    "IS": ("ISLANDIA",                                           "117"),
-    "IL": ("ISRAEL",                                             "118"),
-    "IT": ("ITALIA",                                             "119"),
-    "RS": ("SERVIA",                                             "120"),
-    "JM": ("JAMAICA",                                            "121"),
-    "JP": ("JAPAO",                                              "122"),
-    "UM-67": ("JOHNSTON, ILHAS",                                 "123"),
-    "JO": ("JORDANIA",                                           "124"),
-    "KI": ("KIRIBATI",                                           "125"),
-    "LA": ("LAOS, REP. POP. DEMOCRATICA DO",                     "126"),
-    "BN-LB": ("LEBUAN",                                          "127"),
-    "LS": ("LESOTO",                                             "128"),
-    "LV": ("LETONIA, REPUBLICA DA",                              "129"),
-    "LB": ("LIBANO",                                             "130"),
-    "LR": ("LIBERIA",                                            "131"),
-    "LY": ("LIBIA",                                              "132"),
-    "LI": ("LIECHTENSTEIN",                                      "133"),
-    "LT": ("LITUANIA, REPUBLICA DA",                             "134"),
-    "LU": ("LUXEMBURGO",                                         "135"),
-    "MO": ("MACAU",                                              "136"),
-    "MK": ("MACEDONIA DO NORTE",                                 "137"),
-    "MG": ("MADAGASCAR",                                         "138"),
-    "PT-30": ("MADEIRA, ILHA DA",                                "139"),
-    "MY": ("MALASIA",                                            "140"),
-    "MW": ("MALAVI",                                             "141"),
-    "MV": ("MALDIVAS",                                           "142"),
-    "ML": ("MALI",                                               "143"),
-    "MT": ("MALTA",                                              "144"),
-    "IM": ("MAN, ILHAS",                                         "145"),
+TABELA_PAISES: dict = {
+    "AF": ("AFEGANISTAO",                                       "1"),
+    "ZA": ("AFRICA DO SUL",                                     "2"),
+    "AL": ("ALBANIA, REPUBLICA DA",                             "3"),
+    "DE": ("ALEMANHA",                                          "4"),
+    "AD": ("ANDORRA",                                           "5"),
+    "AO": ("ANGOLA",                                            "6"),
+    "AI": ("ANGUILLA",                                          "7"),
+    "AG": ("ANTIGUA E BARBUDA",                                 "8"),
+    "AN": ("ANTILHAS HOLANDESAS",                               "9"),
+    "SA": ("ARABIA SAUDITA",                                    "10"),
+    "DZ": ("ARGELIA",                                           "11"),
+    "AR": ("ARGENTINA",                                         "12"),
+    "AM": ("ARMENIA, REPUBLICA DA",                             "13"),
+    "AW": ("ARUBA",                                             "14"),
+    "AU": ("AUSTRALIA",                                         "15"),
+    "AT": ("AUSTRIA",                                           "16"),
+    "AZ": ("AZERBAIJAO, REPUBLICA DO",                          "17"),
+    "BS": ("BAHAMAS, ILHAS",                                    "18"),
+    "BH": ("BAHREIN, ILHAS",                                    "19"),
+    "BD": ("BANGLADESH",                                        "20"),
+    "BB": ("BARBADOS",                                          "21"),
+    "BY": ("Belarus, Republica da",                             "22"),
+    "BE": ("BELGICA",                                           "23"),
+    "BZ": ("BELIZE",                                            "24"),
+    "BJ": ("BENIN",                                             "25"),
+    "BM": ("BERMUDAS",                                          "26"),
+    "BO": ("Bolivia, Estado Plurinacional da",                  "27"),
+    "BA": ("Bosnia-Herzegovina, Republica da",                  "28"),
+    "BW": ("BOTSUANA",                                          "29"),
+    "BR": ("BRASIL",                                            "30"),
+    "BN": ("BRUNEI",                                            "31"),
+    "BG": ("BULGARIA, REPUBLICA DA",                            "32"),
+    "BF": ("BURKINA FASO",                                      "33"),
+    "BI": ("BURUNDI",                                           "34"),
+    "BT": ("BUTAO",                                             "35"),
+    "CV": ("CABO VERDE, REPUBLICA DE",                          "36"),
+    "CM": ("CAMAROES",                                          "37"),
+    "KH": ("CAMBOJA",                                           "38"),
+    "CA": ("CANADA",                                            "39"),
+    "GG": ("GUERNSEY, ILHA DO CANAL (INCLUI ALDERNEY E SARK)", "40"),
+    "IC": ("CANARIAS, ILHAS",                                   "41"),
+    "QA": ("CATAR",                                             "42"),
+    "KY": ("CAYMAN, ILHA",                                      "43"),
+    "KZ": ("CAZAQUISTAO, REPUBLICA DO",                         "44"),
+    "TD": ("CHADE",                                             "45"),
+    "CL": ("CHILE",                                             "46"),
+    "CN": ("CHINA, REPUBLICA POPULAR DA",                       "47"),
+    "CY": ("CHIPRE",                                            "48"),
+    "CX": ("CHRISTMAS, ILHA (NAVIDAD)",                         "49"),
+    "SG": ("Singapura",                                         "50"),
+    "CC": ("COCOS (KEELING), ILHAS",                            "51"),
+    "CO": ("COLOMBIA",                                          "52"),
+    "KM": ("COMORES, ILHAS",                                    "53"),
+    "CD": ("CONGO, REPUBLICA DEMOCRATICA DO",                   "54"),
+    "CG": ("CONGO, REPUBLICA DO",                               "55"),
+    "CK": ("COOK, ILHA",                                        "56"),
+    "KP": ("Coreia (do Norte), Rep. Pop. Democratica da",       "57"),
+    "KR": ("Coreia (do Sul), Republica da",                     "58"),
+    "CI": ("COSTA DO MARFIM",                                   "59"),
+    "CR": ("COSTA RICA",                                        "60"),
+    "KW": ("KUWAIT",                                            "61"),
+    "HR": ("CROACIA, REPUBLICA DA",                             "62"),
+    "CU": ("CUBA",                                              "63"),
+    "DK": ("DINAMARCA",                                         "64"),
+    "DJ": ("DJIBUTI",                                           "65"),
+    "DM": ("DOMINICA, ILHA",                                    "66"),
+    "EG": ("EGITO",                                             "67"),
+    "SV": ("EL SALVADOR",                                       "68"),
+    "AE": ("EMIRADOS ARABES UNIDOS",                            "69"),
+    "EC": ("EQUADOR",                                           "70"),
+    "ER": ("ERITREIA",                                          "71"),
+    "GB-SCT": ("ESCOCIA",                                       "72"),
+    "SK": ("ESLOVACA, REPUBLICA",                               "73"),
+    "SI": ("ESLOVENIA, REPUBLICA DA",                           "74"),
+    "ES": ("ESPANHA",                                           "75"),
+    "US": ("ESTADOS UNIDOS",                                    "76"),
+    "EE": ("ESTONIA, REPUBLICA DA",                             "77"),
+    "ET": ("ETIOPIA",                                           "78"),
+    "FK": ("FALKLAND (ILHAS MALVINAS)",                         "79"),
+    "FO": ("FEROE, ILHAS",                                      "80"),
+    "FJ": ("FIJI",                                              "81"),
+    "PH": ("FILIPINAS",                                         "82"),
+    "FI": ("FINLANDIA",                                         "83"),
+    "TW": ("FORMOSA (TAIWAN)",                                  "84"),
+    "FR": ("FRANCA",                                            "85"),
+    "GA": ("GABAO",                                             "86"),
+    "GB-WLS": ("GALES, PAIS DE",                                "87"),
+    "GM": ("GAMBIA",                                            "88"),
+    "GH": ("GANA",                                              "89"),
+    "GE": ("GEORGIA, REPUBLICA DA",                             "90"),
+    "GI": ("GIBRALTAR",                                         "91"),
+    "GB": ("GRA-BRETANHA",                                      "92"),
+    "GD": ("GRANADA",                                           "93"),
+    "GR": ("GRECIA",                                            "94"),
+    "GL": ("GROENLANDIA",                                       "95"),
+    "GP": ("GUADALUPE",                                         "96"),
+    "GU": ("GUAM",                                              "97"),
+    "GT": ("GUATEMALA",                                         "98"),
+    "GY": ("GUIANA",                                            "99"),
+    "GF": ("GUIANA FRANCESA",                                   "100"),
+    "GN": ("GUINE",                                             "101"),
+    "GW": ("GUINE-BISSAU",                                      "102"),
+    "GQ": ("GUINE-EQUATORIAL",                                  "103"),
+    "HT": ("HAITI",                                             "104"),
+    "NL": ("Paises Baixos (Holanda)",                           "105"),
+    "HN": ("HONDURAS",                                          "106"),
+    "HK": ("HONG KONG, REGIAO ADM. ESPECIAL",                   "107"),
+    "HU": ("HUNGRIA, REPUBLICA DA",                             "108"),
+    "YE": ("IEMEN",                                             "109"),
+    "IN": ("INDIA",                                             "110"),
+    "ID": ("INDONESIA",                                         "111"),
+    "GB-ENG": ("INGLATERRA",                                    "112"),
+    "IR": ("IRA, REPUBLICA ISLAMICA DO",                        "113"),
+    "IQ": ("IRAQUE",                                            "114"),
+    "IE": ("IRLANDA",                                           "115"),
+    "GB-NIR": ("IRLANDA DO NORTE",                              "116"),
+    "IS": ("ISLANDIA",                                          "117"),
+    "IL": ("ISRAEL",                                            "118"),
+    "IT": ("ITALIA",                                            "119"),
+    "RS": ("SERVIA",                                            "120"),
+    "JM": ("JAMAICA",                                           "121"),
+    "JP": ("JAPAO",                                             "122"),
+    "UM-67": ("JOHNSTON, ILHAS",                                "123"),
+    "JO": ("JORDANIA",                                          "124"),
+    "KI": ("KIRIBATI",                                          "125"),
+    "LA": ("LAOS, REP. POP. DEMOCRATICA DO",                    "126"),
+    "BN-LB": ("LEBUAN",                                         "127"),
+    "LS": ("LESOTO",                                            "128"),
+    "LV": ("LETONIA, REPUBLICA DA",                             "129"),
+    "LB": ("LIBANO",                                            "130"),
+    "LR": ("LIBERIA",                                           "131"),
+    "LY": ("LIBIA",                                             "132"),
+    "LI": ("LIECHTENSTEIN",                                     "133"),
+    "LT": ("LITUANIA, REPUBLICA DA",                            "134"),
+    "LU": ("LUXEMBURGO",                                        "135"),
+    "MO": ("MACAU",                                             "136"),
+    "MK": ("MACEDONIA DO NORTE",                                "137"),
+    "MG": ("MADAGASCAR",                                        "138"),
+    "PT-30": ("MADEIRA, ILHA DA",                               "139"),
+    "MY": ("MALASIA",                                           "140"),
+    "MW": ("MALAVI",                                            "141"),
+    "MV": ("MALDIVAS",                                          "142"),
+    "ML": ("MALI",                                              "143"),
+    "MT": ("MALTA",                                             "144"),
+    "IM": ("MAN, ILHAS",                                        "145"),
     "MP": ("MARIANAS DO NORTE",                                  "146"),
-    "MA": ("MARROCOS",                                           "147"),
-    "MH": ("MARSHALL, ILHAS",                                    "148"),
-    "MQ": ("MARTINICA",                                          "149"),
-    "MU": ("MAURICIO",                                           "150"),
-    "MR": ("MAURITANIA",                                         "151"),
-    "MX": ("MEXICO",                                             "152"),
-    "MM": ("MIANMAR (BIRMANIA)",                                 "153"),
-    "FM": ("MICRONESIA",                                         "154"),
-    "UM-71": ("MIDWAY, ILHAS",                                   "155"),
-    "MZ": ("MOCAMBIQUE",                                         "156"),
-    "MD": ("MOLDAVIA, REPUBLICA DA",                             "157"),
-    "MC": ("MONACO",                                             "158"),
-    "MN": ("MONGOLIA",                                           "159"),
-    "MS": ("MONTSERRAT, ILHA",                                   "160"),
-    "NA": ("NAMIBIA",                                            "161"),
-    "NR": ("NAURU",                                              "162"),
-    "NP": ("NEPAL",                                              "163"),
-    "NI": ("NICARAGUA",                                          "164"),
-    "NE": ("NIGER",                                              "165"),
-    "NG": ("NIGERIA",                                            "166"),
-    "NU": ("NIUE, ILHA",                                         "167"),
-    "NF": ("NORFOLK, ILHA",                                      "168"),
-    "NO": ("NORUEGA",                                            "169"),
-    "NC": ("NOVA CALEDONIA",                                     "170"),
-    "NZ": ("NOVA ZELANDIA",                                      "171"),
-    "OM": ("OMA",                                                "172"),
-    "PW": ("PALAU",                                              "173"),
-    "PA": ("PANAMA",                                             "174"),
-    "PG": ("PAPUA NOVA GUINE",                                   "175"),
-    "PK": ("PAQUISTAO",                                          "176"),
-    "PY": ("PARAGUAI",                                           "177"),
-    "PE": ("PERU",                                               "178"),
-    "PN": ("PITCAIRN, ILHA",                                     "179"),
-    "PF": ("POLINESIA FRANCESA",                                 "180"),
-    "PL": ("POLONIA, REPUBLICA DA",                              "181"),
-    "PR": ("PORTO RICO",                                         "182"),
-    "PT": ("PORTUGAL",                                           "183"),
-    "KE": ("QUENIA",                                             "184"),
-    "KG": ("QUIRGUIZ, REPUBLICA",                                "185"),
-    "UK": ("REINO UNIDO",                                        "186"),
-    "CF": ("REPUBLICA CENTRO-AFRICANA",                          "187"),
-    "DO": ("REPUBLICA DOMINICANA",                               "188"),
-    "RE": ("REUNIAO, ILHA",                                      "189"),
-    "RO": ("ROMENIA",                                            "190"),
-    "RW": ("RUANDA",                                             "191"),
-    "RU": ("Rússia, Federação da",                               "192"),
-    "EH": ("SAARA OCIDENTAL",                                    "193"),
-    "SB": ("SALOMAO, ILHAS",                                     "194"),
-    "WS": ("SAMOA",                                              "195"),
-    "AS": ("SAMOA AMERICANA",                                    "196"),
-    "SM": ("San Marino",                                         "197"),
-    "SH": ("SANTA HELENA",                                       "198"),
-    "LC": ("SANTA LUCIA",                                        "199"),
-    "KN": ("SAO CRISTOVAO E NEVES",                              "200"),
-    "PM": ("SAO PEDRO E MIQUELON",                               "201"),
-    "ST": ("SAO TOME E PRINCIPE, ILHAS",                         "202"),
-    "VC": ("SAO VICENTE E GRANADINA",                            "203"),
-    "SN": ("SENEGAL",                                            "204"),
-    "SL": ("SERRA LEOA",                                         "205"),
-    "SC": ("SEYCHELLE",                                          "206"),
-    "SY": ("SIRIA, REPUBLICA ARABE DA",                          "207"),
-    "SO": ("SOMALIA",                                            "208"),
-    "LK": ("SRI LANKA",                                          "209"),
-    "SZ": ("eSwatini (Essuatíni, Suazilândia)",                  "210"),
-    "SD": ("SUDAO",                                              "211"),
-    "SE": ("SUECIA",                                             "212"),
-    "CH": ("SUICA",                                              "213"),
-    "SR": ("SURINAME",                                           "214"),
-    "TJ": ("TADJIQUISTAO",                                       "215"),
-    "TH": ("TAILANDIA",                                          "216"),
-    "TZ": ("TANZANIA, REPUBLICA UNIDA DA",                       "217"),
+    "MA": ("MARROCOS",                                          "147"),
+    "MH": ("MARSHALL, ILHAS",                                   "148"),
+    "MQ": ("MARTINICA",                                         "149"),
+    "MU": ("MAURICIO",                                          "150"),
+    "MR": ("MAURITANIA",                                        "151"),
+    "MX": ("MEXICO",                                            "152"),
+    "MM": ("MIANMAR (BIRMANIA)",                                "153"),
+    "FM": ("MICRONESIA",                                        "154"),
+    "UM-71": ("MIDWAY, ILHAS",                                  "155"),
+    "MZ": ("MOCAMBIQUE",                                        "156"),
+    "MD": ("MOLDAVIA, REPUBLICA DA",                            "157"),
+    "MC": ("MONACO",                                            "158"),
+    "MN": ("MONGOLIA",                                          "159"),
+    "MS": ("MONTSERRAT, ILHA",                                  "160"),
+    "NA": ("NAMIBIA",                                           "161"),
+    "NR": ("NAURU",                                             "162"),
+    "NP": ("NEPAL",                                             "163"),
+    "NI": ("NICARAGUA",                                         "164"),
+    "NE": ("NIGER",                                             "165"),
+    "NG": ("NIGERIA",                                           "166"),
+    "NU": ("NIUE, ILHA",                                        "167"),
+    "NF": ("NORFOLK, ILHA",                                     "168"),
+    "NO": ("NORUEGA",                                           "169"),
+    "NC": ("NOVA CALEDONIA",                                    "170"),
+    "NZ": ("NOVA ZELANDIA",                                     "171"),
+    "OM": ("OMA",                                               "172"),
+    "PW": ("PALAU",                                             "173"),
+    "PA": ("PANAMA",                                            "174"),
+    "PG": ("PAPUA NOVA GUINE",                                  "175"),
+    "PK": ("PAQUISTAO",                                         "176"),
+    "PY": ("PARAGUAI",                                          "177"),
+    "PE": ("PERU",                                              "178"),
+    "PN": ("PITCAIRN, ILHA",                                    "179"),
+    "PF": ("POLINESIA FRANCESA",                                "180"),
+    "PL": ("POLONIA, REPUBLICA DA",                             "181"),
+    "PR": ("PORTO RICO",                                        "182"),
+    "PT": ("PORTUGAL",                                          "183"),
+    "KE": ("QUENIA",                                            "184"),
+    "KG": ("QUIRGUIZ, REPUBLICA",                               "185"),
+    "UK": ("REINO UNIDO",                                       "186"),
+    "CF": ("REPUBLICA CENTRO-AFRICANA",                         "187"),
+    "DO": ("REPUBLICA DOMINICANA",                              "188"),
+    "RE": ("REUNIAO, ILHA",                                     "189"),
+    "RO": ("ROMENIA",                                           "190"),
+    "RW": ("RUANDA",                                            "191"),
+    "RU": ("Russia, Federacao da",                              "192"),
+    "EH": ("SAARA OCIDENTAL",                                   "193"),
+    "SB": ("SALOMAO, ILHAS",                                    "194"),
+    "WS": ("SAMOA",                                             "195"),
+    "AS": ("SAMOA AMERICANA",                                   "196"),
+    "SM": ("San Marino",                                        "197"),
+    "SH": ("SANTA HELENA",                                      "198"),
+    "LC": ("SANTA LUCIA",                                       "199"),
+    "KN": ("SAO CRISTOVAO E NEVES",                             "200"),
+    "PM": ("SAO PEDRO E MIQUELON",                              "201"),
+    "ST": ("SAO TOME E PRINCIPE, ILHAS",                        "202"),
+    "VC": ("SAO VICENTE E GRANADINA",                           "203"),
+    "SN": ("SENEGAL",                                           "204"),
+    "SL": ("SERRA LEOA",                                        "205"),
+    "SC": ("SEYCHELLE",                                         "206"),
+    "SY": ("SIRIA, REPUBLICA ARABE DA",                         "207"),
+    "SO": ("SOMALIA",                                           "208"),
+    "LK": ("SRI LANKA",                                         "209"),
+    "SZ": ("eSwatini (Essuatini, Suazilândia)",                 "210"),
+    "SD": ("SUDAO",                                             "211"),
+    "SE": ("SUECIA",                                            "212"),
+    "CH": ("SUICA",                                             "213"),
+    "SR": ("SURINAME",                                          "214"),
+    "TJ": ("TADJIQUISTAO",                                      "215"),
+    "TH": ("TAILANDIA",                                         "216"),
+    "TZ": ("TANZANIA, REPUBLICA UNIDA DA",                      "217"),
     "CZ": ("TCHECA, REPUBLICA",                                  "218"),
-    "IO": ("TERRITORIO BRITANICO OC. INDICO",                    "219"),
-    "TL": ("TIMOR LESTE",                                        "220"),
-    "TG": ("TOGO",                                               "221"),
-    "TO": ("TONGA",                                              "222"),
-    "TK": ("TOQUELAU, ILHAS",                                    "223"),
-    "TT": ("TRINIDAD E TOBAGO",                                  "224"),
-    "TN": ("TUNISIA",                                            "225"),
-    "TC": ("TURCAS E CAICOS, ILHAS",                             "226"),
-    "TM": ("TURCOMENISTAO, REPUBLICA DO",                        "227"),
-    "TR": ("TURQUIA",                                            "228"),
-    "TV": ("TUVALU",                                             "229"),
-    "UA": ("UCRANIA",                                            "230"),
-    "UG": ("UGANDA",                                             "231"),
-    "UY": ("URUGUAI",                                            "232"),
-    "UZ": ("UZBEQUISTAO, REPUBLICA DO",                          "233"),
-    "VU": ("VANUATU",                                            "234"),
-    "VA": ("VATICANO, ESTADO DA CIDADE DO",                      "235"),
-    "VE": ("VENEZUELA",                                          "236"),
-    "VN": ("VIETNA",                                             "237"),
-    "VG": ("VIRGENS, ILHAS (BRITANICAS)",                        "238"),
-    "VI": ("VIRGENS, ILHAS (E.U.A.)",                            "239"),
-    "UM-79": ("WAKE, ILHA",                                      "240"),
-    "WF": ("WALLIS E FUTUNA, ILHAS",                             "241"),
-    "ZM": ("ZAMBIA",                                             "242"),
-    "ZW": ("ZIMBABUE",                                           "243"),
-    "PA-CZ": ("ZONA DO CANAL DO PANAMA",                         "244"),
-    "ME": ("MONTENEGRO",                                         "245"),
-    "XX": ("EXTERIOR",                                           "246"),
-    "UM": ("Pacífico, Ilhas do (Possessão dos EUA)",             "248"),
-    "QA2": ("QATAR",                                             "249"),
-    "KN2": ("SAINT KITTS E NEVIS",                               "250"),
-    "CS": ("SERVIA E MONTENEGRO",                                "251"),
-    "AX": ("ALAND, ILHAS",                                       "252"),
-    "AQ": ("ANTARTICA",                                          "253"),
-    "BQ": ("Bonaire, Saint Eustatius e Saba",                    "254"),
-    "BV": ("BOUVET, ILHA",                                       "255"),
-    "CW": ("CURACAO",                                            "256"),
-    "HM": ("Heard e Ilhas McDonald, Ilha",                       "257"),
-    "MF": ("São Martinho, Ilha de (Parte Francesa)",             "258"),
-    "GS": ("Geórgia do Sul e Sandwich do Sul, Ilhas",            "259"),
-    "JE": ("Jersey. Ilha do Canal",                              "260"),
-    "YT": ("Mayotte",                                            "261"),
-    "BL": ("São Bartolomeu",                                     "262"),
-    "SJ": ("Svalbard e Jan Mayen",                               "263"),
-    "TF": ("Terras Austrais Francesas",                          "264"),
-    "SX": ("SAO MARTINHO, ILHA DE (PARTE HOLANDESA)",            "265"),
-    "PS": ("Palestina",                                          "266"),
-    "SS": ("Sudão do Sul",                                       "267"),
-    "GG2": ("Guernsey, Ilha do Canal",                           "268"),
-    "XB": ("Bancos Centrais",                                    "269"),
-    "XO": ("Organizações Internacionais",                        "270"),
-    "XF": ("FEZZAN",                                             "271"),
-    "XD": ("DUBAI",                                              "272"),
-    "XP": ("DELEGAÇÃO ESPECIAL DA PALESTINA",                    "273"),
+    "IO": ("TERRITORIO BRITANICO OC. INDICO",                   "219"),
+    "TL": ("TIMOR LESTE",                                       "220"),
+    "TG": ("TOGO",                                              "221"),
+    "TO": ("TONGA",                                             "222"),
+    "TK": ("TOQUELAU, ILHAS",                                   "223"),
+    "TT": ("TRINIDAD E TOBAGO",                                 "224"),
+    "TN": ("TUNISIA",                                           "225"),
+    "TC": ("TURCAS E CAICOS, ILHAS",                            "226"),
+    "TM": ("TURCOMENISTAO, REPUBLICA DO",                       "227"),
+    "TR": ("TURQUIA",                                           "228"),
+    "TV": ("TUVALU",                                            "229"),
+    "UA": ("UCRANIA",                                           "230"),
+    "UG": ("UGANDA",                                            "231"),
+    "UY": ("URUGUAI",                                           "232"),
+    "UZ": ("UZBEQUISTAO, REPUBLICA DO",                         "233"),
+    "VU": ("VANUATU",                                           "234"),
+    "VA": ("VATICANO, ESTADO DA CIDADE DO",                     "235"),
+    "VE": ("VENEZUELA",                                         "236"),
+    "VN": ("VIETNA",                                            "237"),
+    "VG": ("VIRGENS, ILHAS (BRITANICAS)",                       "238"),
+    "VI": ("VIRGENS, ILHAS (E.U.A.)",                           "239"),
+    "UM-79": ("WAKE, ILHA",                                     "240"),
+    "WF": ("WALLIS E FUTUNA, ILHAS",                            "241"),
+    "ZM": ("ZAMBIA",                                            "242"),
+    "ZW": ("ZIMBABUE",                                          "243"),
+    "PA-CZ": ("ZONA DO CANAL DO PANAMA",                        "244"),
+    "ME": ("MONTENEGRO",                                        "245"),
+    "XX": ("EXTERIOR",                                          "246"),
+    "UM": ("Pacifico, Ilhas do (Possessao dos EUA)",            "248"),
+    "QA2": ("QATAR",                                            "249"),
+    "KN2": ("SAINT KITTS E NEVIS",                              "250"),
+    "CS": ("SERVIA E MONTENEGRO",                               "251"),
+    "AX": ("ALAND, ILHAS",                                      "252"),
+    "AQ": ("ANTARTICA",                                         "253"),
+    "BQ": ("Bonaire, Saint Eustatius e Saba",                   "254"),
+    "BV": ("BOUVET, ILHA",                                      "255"),
+    "CW": ("CURACAO",                                           "256"),
+    "HM": ("Heard e Ilhas McDonald, Ilha",                      "257"),
+    "MF": ("Sao Martinho, Ilha de (Parte Francesa)",            "258"),
+    "GS": ("Georgia do Sul e Sandwich do Sul, Ilhas",           "259"),
+    "JE": ("Jersey. Ilha do Canal",                             "260"),
+    "YT": ("Mayotte",                                           "261"),
+    "BL": ("Sao Bartolomeu",                                    "262"),
+    "SJ": ("Svalbard e Jan Mayen",                              "263"),
+    "TF": ("Terras Austrais Francesas",                         "264"),
+    "SX": ("SAO MARTINHO, ILHA DE (PARTE HOLANDESA)",           "265"),
+    "PS": ("Palestina",                                         "266"),
+    "SS": ("Sudao do Sul",                                      "267"),
+    "GG2": ("Guernsey, Ilha do Canal",                          "268"),
+    "XB": ("Bancos Centrais",                                   "269"),
+    "XO": ("Organizacoes Internacionais",                       "270"),
+    "XF": ("FEZZAN",                                            "271"),
+    "XD": ("DUBAI",                                             "272"),
+    "XP": ("DELEGACAO ESPECIAL DA PALESTINA",                   "273"),
 }
 
 # Mapa reverso: nome em inglês (Nominatim) → ISO Alpha-2
-_NOME_EN_PARA_ISO: dict[str, str] = {
+_NOME_EN_PARA_ISO: dict = {
     "Afghanistan": "AF", "South Africa": "ZA", "Albania": "AL",
     "Germany": "DE", "Andorra": "AD", "Angola": "AO",
     "Anguilla": "AI", "Antigua and Barbuda": "AG",
@@ -323,7 +323,7 @@ _NOME_EN_PARA_ISO: dict[str, str] = {
     "Republic of the Congo": "CG", "Congo-Brazzaville": "CG",
     "Congo-Kinshasa": "CD", "Cook Islands": "CK",
     "North Korea": "KP", "South Korea": "KR",
-    "Ivory Coast": "CI", "Côte d'Ivoire": "CI",
+    "Ivory Coast": "CI", "Cote d'Ivoire": "CI",
     "Costa Rica": "CR", "Kuwait": "KW", "Croatia": "HR",
     "Cuba": "CU", "Denmark": "DK", "Djibouti": "DJ",
     "Dominica": "DM", "Egypt": "EG", "El Salvador": "SV",
@@ -372,7 +372,7 @@ _NOME_EN_PARA_ISO: dict[str, str] = {
     "Poland": "PL", "Puerto Rico": "PR", "Portugal": "PT",
     "Kenya": "KE", "Kyrgyzstan": "KG",
     "Central African Republic": "CF",
-    "Dominican Republic": "DO", "Réunion": "RE",
+    "Dominican Republic": "DO", "Reunion": "RE",
     "Romania": "RO", "Rwanda": "RW", "Russia": "RU",
     "Western Sahara": "EH", "Solomon Islands": "SB",
     "Samoa": "WS", "American Samoa": "AS",
@@ -392,7 +392,7 @@ _NOME_EN_PARA_ISO: dict[str, str] = {
     "Tonga": "TO", "Tokelau": "TK",
     "Trinidad and Tobago": "TT", "Tunisia": "TN",
     "Turks and Caicos Islands": "TC", "Turkmenistan": "TM",
-    "Turkey": "TR", "Türkiye": "TR", "Tuvalu": "TV",
+    "Turkey": "TR", "Turkiye": "TR", "Tuvalu": "TV",
     "Ukraine": "UA", "Uganda": "UG", "Uruguay": "UY",
     "Uzbekistan": "UZ", "Vanuatu": "VU",
     "Vatican City": "VA", "Venezuela": "VE",
@@ -401,7 +401,7 @@ _NOME_EN_PARA_ISO: dict[str, str] = {
     "United States Virgin Islands": "VI",
     "Wallis and Futuna": "WF", "Zambia": "ZM",
     "Zimbabwe": "ZW", "Montenegro": "ME",
-    "Curaçao": "CW", "Mayotte": "YT",
+    "Curacao": "CW", "Mayotte": "YT",
     "South Sudan": "SS", "Palestine": "PS",
     "State of Palestine": "PS", "Jersey": "JE",
     "Svalbard and Jan Mayen": "SJ",
@@ -473,7 +473,7 @@ def gera_csv_dominio(registros: list) -> str:
     buf = io.StringIO()
     writer = csv.writer(
         buf, delimiter="|", lineterminator="\n",
-        quoting=csv.QUOTE_NONE, escapechar="\\"
+        quoting=csv.QUOTE_NONE, escapechar="\\",
     )
     for reg in registros:
         writer.writerow(reg)
@@ -486,18 +486,13 @@ def gera_csv_dominio(registros: list) -> str:
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def detectar_pais_por_endereco(endereco: str) -> dict:
-    """
-    Consulta Nominatim/OSM e retorna o código interno do Domínio Sistemas.
-    Retorna dict com: iso2, nome_en, nome_dominio, cod_dominio,
-                      endereco_completo, confianca, erro.
-    """
     resultado = {
         "iso2": "", "nome_en": "", "nome_dominio": "",
         "cod_dominio": "", "endereco_completo": "",
         "confianca": "baixa", "erro": None,
     }
     if not endereco or not endereco.strip():
-        resultado["erro"] = "Endereço vazio."
+        resultado["erro"] = "Endereco vazio."
         return resultado
     try:
         geolocator = Nominatim(
@@ -510,7 +505,7 @@ def detectar_pais_por_endereco(endereco: str) -> dict:
             addressdetails=True, exactly_one=True,
         )
         if location is None:
-            resultado["erro"] = f"Endereço não encontrado: '{endereco}'"
+            resultado["erro"] = f"Endereco nao encontrado: '{endereco}'"
             return resultado
 
         raw     = location.raw.get("address", {})
@@ -521,14 +516,11 @@ def detectar_pais_por_endereco(endereco: str) -> dict:
         resultado["iso2"]              = iso2
         resultado["endereco_completo"] = location.address
 
-        # Resolve pelo ISO
-        if iso2 in TABELA_PAISES:
-            nome_dom, cod = TABELA_PAISES[iso2]
-        else:
-            # Fallback pelo nome em inglês
-            iso2 = _NOME_EN_PARA_ISO.get(nome_en, "")
-            resultado["iso2"] = iso2
-            nome_dom, cod = TABELA_PAISES.get(iso2, ("", ""))
+        nome_dom, cod = TABELA_PAISES.get(iso2, ("", ""))
+        if not cod:
+            iso2_fb = _NOME_EN_PARA_ISO.get(nome_en, "")
+            resultado["iso2"] = iso2_fb
+            nome_dom, cod = TABELA_PAISES.get(iso2_fb, ("", ""))
 
         resultado["nome_dominio"] = nome_dom
         resultado["cod_dominio"]  = cod
@@ -539,13 +531,13 @@ def detectar_pais_por_endereco(endereco: str) -> dict:
             resultado["confianca"] = "media"
         else:
             resultado["erro"] = (
-                f"País '{nome_en}' (ISO: {iso2}) não encontrado "
-                "na tabela Domínio. Selecione manualmente."
+                f"Pais '{nome_en}' (ISO: {iso2}) nao encontrado "
+                "na tabela Dominio. Selecione manualmente."
             )
     except GeocoderTimedOut:
         resultado["erro"] = "Timeout ao consultar o geocoder. Tente novamente."
     except GeocoderServiceError as e:
-        resultado["erro"] = f"Erro no serviço de geocoding: {e}"
+        resultado["erro"] = f"Erro no servico de geocoding: {e}"
     except Exception as e:
         resultado["erro"] = f"Erro inesperado: {e}"
     return resultado
@@ -556,296 +548,261 @@ def detectar_pais_por_endereco(endereco: str) -> dict:
 # ════════════════════════════════════════════════════════════════════════════
 
 def reg_0000(cnpj_empresa: str) -> list:
-    """Registro 0000 – Identificação da empresa."""
     return ["0000", limpa_cnpj(cnpj_empresa)]
 
 
 def reg_0020(row, cod_pais: str = "") -> list:
-    """
-    Registro 0020 – Cadastro de fornecedores.
-    cod_pais: código interno Domínio (ex: "76" para EUA).
-              Preenchido pelo geocoder para prestadores estrangeiros.
-    """
-    ind      = safe(row, "Indicador de CPF/CNPJ do Prestador")
-    cnpj     = limpa_cnpj(safe(row, "CPF/CNPJ do Prestador"))
-
-    # Estrangeiro (Indicador = 3) ou sem CNPJ
-    if ind == "3" or not cnpj:
-        cnpj = "Outros"
-
-    razao    = safe(row, "Razão Social do Prestador")[:150]
-    endereco = safe(row, "Endereço do Prestador")
-    numero   = re.sub(r"\D", "", safe(row, "Número do Endereço do Prestador"))
-    compl    = safe(row, "Complemento do Endereço do Prestador")
-    bairro   = safe(row, "Bairro do Prestador")
-    uf       = safe(row, "UF do Prestador")
-    cep      = re.sub(r"\D", "", safe(row, "CEP do Prestador"))
-    email    = safe(row, "Email do Prestador")
-    insc_mun = limpa_im(safe(row, "Inscrição Municipal do Prestador"))
-
-    # Exterior: UF = EX, código do país preenchido
-    pais_campo = ""
-    if ind == "3":
-        uf         = "EX"
-        pais_campo = cod_pais   # campo 11 — código interno Domínio
-
-    return [
-        "0020",      # 1  - Identificação do registro
-        cnpj,        # 2  - Inscrição (CNPJ/CPF/Outros)
-        razao,       # 3  - Razão Social
-        "",          # 4  - Apelido
-        endereco,    # 5  - Endereço
-        numero,      # 6  - Número do endereço
-        compl,       # 7  - Complemento
-        bairro,      # 8  - Bairro
-        "",          # 9  - Código do município
-        uf,          # 10 - UF (EX para exterior)
-        pais_campo,  # 11 - Código do País (interno Domínio)
-        cep,         # 12 - CEP
-        "",          # 13 - Inscrição Estadual
-        insc_mun,    # 14 - Inscrição Municipal
-        "",          # 15 - Inscrição Suframa
-        "",          # 16 - DDD
-        "",          # 17 - Telefone
-        "",          # 18 - FAX
-        "",          # 19 - Data do cadastro
-        "",          # 20 - Conta contábil
-        "",          # 21 - Conta contábil cliente
-        "N",         # 22 - Agropecuário
-        "7",         # 23 - Natureza jurídica (7=Empresa Privada)
-        "N",         # 24 - Regime de apuração (N=Normal)
-        "N",         # 25 - Contribuinte ICMS
-        "",          # 26 - Alíquota ICMS
-        "",          # 27 - Categoria do estabelecimento
-        "",          # 28 - Inscrição Estadual ST
-        email,       # 29 - Email
-        "N",         # 30 - Interdependência
-        "N",         # 31 - Contribuinte CPRB
-        "",          # 32 - Processo administrativo/judicial
-        "",          # 33 - Tipo Inscrição
-    ]
-
-
-def reg_1000(row, cfop: str, cod_acumulador: str, cod_especie: str) -> list:
-    """
-    Registro 1000 – Nota Fiscal de Entrada.
-
-    Mapeamento NFTS → Domínio:
-      Número do Documento           → campo 8
-      Série do Documento            → campo 9
-      Data da Prestação de Serviços → campo 11 (Data entrada) e campo 48 (Competência)
-      Data Hora Emissão NFTS        → campo 12 (Data emissão)
-      Valor dos Serviços            → campo 13 (Valor contábil) e campo 39 (Valor produtos)
-      ISS Retido = S                → campo 20 = "18"
-      ISS Retido = N                → campo 20 = ""
-    """
     ind  = safe(row, "Indicador de CPF/CNPJ do Prestador")
     cnpj = limpa_cnpj(safe(row, "CPF/CNPJ do Prestador"))
     if ind == "3" or not cnpj:
         cnpj = "Outros"
 
-    num_doc = re.sub(r"\.0$", "", safe(row, "Número do Documento"))
-    serie   = safe(row, "Série do Documento")
+    razao    = safe(row, "Razao Social do Prestador")[:150]
+    # Tenta coluna com acento, senão sem acento
+    if not razao:
+        razao = safe(row, "Raz\u00e3o Social do Prestador")[:150]
+
+    endereco = safe(row, "Endere\u00e7o do Prestador") or safe(row, "Endereco do Prestador")
+    numero   = re.sub(r"\D", "", safe(row, "N\u00famero do Endere\u00e7o do Prestador")
+                      or safe(row, "Numero do Endereco do Prestador"))
+    compl    = safe(row, "Complemento do Endere\u00e7o do Prestador") or safe(row, "Complemento do Endereco do Prestador")
+    bairro   = safe(row, "Bairro do Prestador")
+    uf       = safe(row, "UF do Prestador")
+    cep      = re.sub(r"\D", "", safe(row, "CEP do Prestador"))
+    email    = safe(row, "Email do Prestador")
+    insc_mun = limpa_im(safe(row, "Inscri\u00e7\u00e3o Municipal do Prestador")
+                        or safe(row, "Inscricao Municipal do Prestador"))
+
+    pais_campo = ""
+    if ind == "3":
+        uf         = "EX"
+        pais_campo = cod_pais
+
+    return [
+        "0020",     # 1  - Identificacao do registro
+        cnpj,       # 2  - Inscricao (CNPJ/CPF/Outros)
+        razao,      # 3  - Razao Social
+        "",         # 4  - Apelido
+        endereco,   # 5  - Endereco
+        numero,     # 6  - Numero do endereco
+        compl,      # 7  - Complemento
+        bairro,     # 8  - Bairro
+        "",         # 9  - Codigo do municipio
+        uf,         # 10 - UF (EX para exterior)
+        pais_campo, # 11 - Codigo do Pais (interno Dominio)
+        cep,        # 12 - CEP
+        "",         # 13 - Inscricao Estadual
+        insc_mun,   # 14 - Inscricao Municipal
+        "",         # 15 - Inscricao Suframa
+        "",         # 16 - DDD
+        "",         # 17 - Telefone
+        "",         # 18 - FAX
+        "",         # 19 - Data do cadastro
+        "",         # 20 - Conta contabil
+        "",         # 21 - Conta contabil cliente
+        "N",        # 22 - Agropecuario
+        "7",        # 23 - Natureza juridica (7=Empresa Privada)
+        "N",        # 24 - Regime de apuracao (N=Normal)
+        "N",        # 25 - Contribuinte ICMS
+        "",         # 26 - Aliquota ICMS
+        "",         # 27 - Categoria do estabelecimento
+        "",         # 28 - Inscricao Estadual ST
+        email,      # 29 - Email
+        "N",        # 30 - Interdependencia
+        "N",        # 31 - Contribuinte CPRB
+        "",         # 32 - Processo administrativo/judicial
+        "",         # 33 - Tipo Inscricao
+    ]
+
+
+def reg_1000(row, cfop: str, cod_acumulador: str, cod_especie: str) -> list:
+    ind  = safe(row, "Indicador de CPF/CNPJ do Prestador")
+    cnpj = limpa_cnpj(safe(row, "CPF/CNPJ do Prestador"))
+    if ind == "3" or not cnpj:
+        cnpj = "Outros"
+
+    num_doc = re.sub(r"\.0$", "", safe(row, "N\u00famero do Documento")
+                     or safe(row, "Numero do Documento"))
+    serie = safe(row, "S\u00e9rie do Documento") or safe(row, "Serie do Documento")
     if serie in ("-", "nan", ""):
         serie = ""
 
-    data_entrada = formata_data(safe(row, "Data da Prestação de Serviços"))
-    data_emissao = formata_data(safe(row, "Data Hora Emissão NFTS"))
-    valor_cont   = limpa_valor(safe(row, "Valor dos Serviços"))
+    data_entrada = formata_data(safe(row, "Data da Presta\u00e7\u00e3o de Servi\u00e7os")
+                                or safe(row, "Data da Prestacao de Servicos"))
+    data_emissao = formata_data(safe(row, "Data Hora Emiss\u00e3o NFTS")
+                                or safe(row, "Data Hora Emissao NFTS"))
+    valor_cont   = limpa_valor(safe(row, "Valor dos Servi\u00e7os")
+                               or safe(row, "Valor dos Servicos"))
 
     iss_retido     = safe(row, "ISS Retido").strip().upper()
     cod_recolh_iss = "18" if iss_retido == "S" else ""
 
-    insc_mun = limpa_im(safe(row, "Inscrição Municipal do Prestador"))
+    insc_mun = limpa_im(safe(row, "Inscri\u00e7\u00e3o Municipal do Prestador")
+                        or safe(row, "Inscricao Municipal do Prestador"))
 
     return [
-        "1000",          # 1  - Identificação do registro
-        cod_especie,     # 2  - Código da espécie (03=NFS)
-        cnpj,            # 3  - Inscrição fornecedor
-        "",              # 4  - Código de Exclusão da DIEF
-        cod_acumulador,  # 5  - Código do acumulador
+        "1000",          # 1  - Identificacao do registro
+        cod_especie,     # 2  - Codigo da especie (03=NFS)
+        cnpj,            # 3  - Inscricao fornecedor
+        "",              # 4  - Codigo de Exclusao da DIEF
+        cod_acumulador,  # 5  - Codigo do acumulador
         cfop,            # 6  - CFOP
         "",              # 7  - Segmento
-        num_doc,         # 8  - Número do documento
-        serie,           # 9  - Série
-        "",              # 10 - Número do documento final
+        num_doc,         # 8  - Numero do documento
+        serie,           # 9  - Serie
+        "",              # 10 - Numero do documento final
         data_entrada,    # 11 - Data da entrada (dd/mm/aaaa)
-        data_emissao,    # 12 - Data emissão (dd/mm/aaaa)
-        valor_cont,      # 13 - Valor contábil
-        "",              # 14 - Valor da exclusão da DIEF
-        "",              # 15 - Observação
+        data_emissao,    # 12 - Data emissao (dd/mm/aaaa)
+        valor_cont,      # 13 - Valor contabil
+        "",              # 14 - Valor da exclusao da DIEF
+        "",              # 15 - Observacao
         "S",             # 16 - Modalidade do frete (S=Sem frete)
         "T",             # 17 - Emitente (T=Terceiros)
-        "",              # 18 - CFOP estendido (só SE)
-        "",              # 19 - Código transferência crédito (só RS)
-        cod_recolh_iss,  # 20 - Código Recolhimento ISS Retido
-        "",              # 21 - Código Recolhimento IRRF
-        "",              # 22 - Código da observação
-        "",              # 23 - Data do visto (só MG)
-        "E",             # 24 - Fato gerador CRF (E=Emissão)
-        "E",             # 25 - Fato gerador IRRF (E=Emissão)
+        "",              # 18 - CFOP estendido (so SE)
+        "",              # 19 - Codigo transferencia credito (so RS)
+        cod_recolh_iss,  # 20 - Codigo Recolhimento ISS Retido
+        "",              # 21 - Codigo Recolhimento IRRF
+        "",              # 22 - Codigo da observacao
+        "",              # 23 - Data do visto (so MG)
+        "E",             # 24 - Fato gerador CRF (E=Emissao)
+        "E",             # 25 - Fato gerador IRRF (E=Emissao)
         "",              # 26 - Valor do frete
         "",              # 27 - Valor do seguro
         "",              # 28 - Valor das despesas
         "",              # 29 - Valor do PIS
-        "",              # 30 - Código Antecipação Tributária
+        "",              # 30 - Codigo Antecipacao Tributaria
         "",              # 31 - Valor do COFINS
-        "",              # 32 - Valor DARE (só SE)
-        "",              # 33 - Alíquota DARE (só SE)
-        "",              # 34 - Valor base cálculo ICMS ST
-        "",              # 35 - Entradas isentas (só MG)
-        "",              # 36 - Outras entradas isentas (só MG)
-        "",              # 37 - Valor transporte incluído na base (só MG)
-        "",              # 38 - Código de ressarcimento
+        "",              # 32 - Valor DARE (so SE)
+        "",              # 33 - Aliquota DARE (so SE)
+        "",              # 34 - Valor base calculo ICMS ST
+        "",              # 35 - Entradas isentas (so MG)
+        "",              # 36 - Outras entradas isentas (so MG)
+        "",              # 37 - Valor transporte incluido na base (so MG)
+        "",              # 38 - Codigo de ressarcimento
         valor_cont,      # 39 - Valor produtos
-        "",              # 40 - Município Origem
-        "0",             # 41 - Situação da Nota (0=Documento Regular)
-        "",              # 42 - Código da situação tributária
-        "",              # 43 - Sub série
-        "",              # 44 - Inscrição estadual do fornecedor
-        insc_mun,        # 45 - Inscrição municipal do fornecedor
-        "",              # 46 - Código da operação e prestação
-        "",              # 47 - Valor a ser deduzido da receita tributável
-        data_entrada,    # 48 - Competência (dd/mm/aaaa)
-        "",              # 49 - Operação (só PA)
-        "",              # 50 - Número do parecer fiscal
+        "",              # 40 - Municipio Origem
+        "0",             # 41 - Situacao da Nota (0=Documento Regular)
+        "",              # 42 - Codigo da situacao tributaria
+        "",              # 43 - Sub serie
+        "",              # 44 - Inscricao estadual do fornecedor
+        insc_mun,        # 45 - Inscricao municipal do fornecedor
+        "",              # 46 - Codigo da operacao e prestacao
+        "",              # 47 - Valor a ser deduzido da receita tributavel
+        data_entrada,    # 48 - Competencia (dd/mm/aaaa)
+        "",              # 49 - Operacao (so PA)
+        "",              # 50 - Numero do parecer fiscal
         "",              # 51 - Data do parecer fiscal
-        "",              # 52 - Número da declaração de Importação
-        "N",             # 53 - Possui benefício fiscal
-        "",              # 54 - Chave da nota fiscal eletrônica
-        "",              # 55 - Código de recolhimento FETHAB
-        "",              # 56 - Responsável pelo recolhimento FETHAB
+        "",              # 52 - Numero da declaracao de Importacao
+        "N",             # 53 - Possui beneficio fiscal
+        "",              # 54 - Chave da nota fiscal eletronica
+        "",              # 55 - Codigo de recolhimento FETHAB
+        "",              # 56 - Responsavel pelo recolhimento FETHAB
         "",              # 57 - CFOP documento fiscal
         "",              # 58 - Tipo de CT-e
-        "",              # 59 - CT-e referência
-        "",              # 60 - Modalidade da importação
-        "",              # 61 - Código da informação complementar
-        "",              # 62 - Informação complementar
+        "",              # 59 - CT-e referencia
+        "",              # 60 - Modalidade da importacao
+        "",              # 61 - Codigo da informacao complementar
+        "",              # 62 - Informacao complementar
         "",              # 63 - Classe de consumo
-        "",              # 64 - Tipo de ligação
-        "",              # 65 - Grupo de tensão
+        "",              # 64 - Tipo de ligacao
+        "",              # 65 - Grupo de tensao
         "",              # 66 - Tipo de assinante
         "",              # 67 - KWH consumido
-        "",              # 68 - Valor fornecido/consumido gás ou energia
+        "",              # 68 - Valor fornecido/consumido gas ou energia
         "",              # 69 - Valor cobrado de terceiros
-        "",              # 70 - Tipo do documento de importação
-        "",              # 71 - Número do Ato Concessório Drawback
+        "",              # 70 - Tipo do documento de importacao
+        "",              # 71 - Numero do Ato Concessorio Drawback
         "",              # 72 - Natureza do frete PIS/COFINS
         "",              # 73 - CST PIS/COFINS
-        "",              # 74 - Base do crédito PIS/COFINS
-        "",              # 75 - Valor serviços/itens PIS/COFINS
-        "",              # 76 - Base de cálculo PIS/COFINS
-        "",              # 77 - Alíquota de PIS
-        "",              # 78 - Alíquota de COFINS
+        "",              # 74 - Base do credito PIS/COFINS
+        "",              # 75 - Valor servicos/itens PIS/COFINS
+        "",              # 76 - Base de calculo PIS/COFINS
+        "",              # 77 - Aliquota de PIS
+        "",              # 78 - Aliquota de COFINS
         "",              # 79 - Chave de NFSe
-        "",              # 80 - Número do processo ou ato concessório
+        "",              # 80 - Numero do processo ou ato concessorio
         "",              # 81 - Origem do processo
-        "",              # 82 - Data da escrituração
-        "",              # 83 - CFPS (só DF)
+        "",              # 82 - Data da escrituracao
+        "",              # 83 - CFPS (so DF)
         "",              # 84 - Natureza da receita PIS/COFINS
         "",              # 85 - CST IPI
-        "",              # 86 - Lançamentos de SCP
-        "",              # 87 - Tipo de serviço
-        "",              # 88 - Município destino
-        "",              # 89 - Pedágio
+        "",              # 86 - Lancamentos de SCP
+        "",              # 87 - Tipo de servico
+        "",              # 88 - Municipio destino
+        "",              # 89 - Pedagio
         "",              # 90 - IPI
         "",              # 91 - ICMS ST
-        "",              # 92 - EFD-Reinf Tipo de serviço
-        "",              # 93 - EFD-Reinf Indicativo Prestação
-        "",              # 94 - Número doc. arrecadação (só RS)
-        "",              # 95 - Tipo do título
-        "",              # 96 - Identificação
+        "",              # 92 - EFD-Reinf Tipo de servico
+        "",              # 93 - EFD-Reinf Indicativo Prestacao
+        "",              # 94 - Numero doc. arrecadacao (so RS)
+        "",              # 95 - Tipo do titulo
+        "",              # 96 - Identificacao
         "",              # 97 - ICMS Desonerado
-        "",              # 98 - IPI Devolução
+        "",              # 98 - IPI Devolucao
     ]
 
 
 def reg_1020(row) -> list:
-    """
-    Registro 1020 – Impostos da Nota Fiscal de Entrada.
-
-    ISS Retido = S → Código 18 (ISS Retido)
-                     Base    = Valor dos Serviços
-                     Alíq.   = Alíquota da nota
-                     Valor   = Valor ISS
-                     Outras  = vazio
-                     V.Cont. = Valor dos Serviços
-
-    ISS Retido = N → Código 3 (ISS)
-                     Base    = 0.00  (zerado)
-                     Alíq.   = 0.00  (zerado)
-                     Valor   = 0.00  (zerado)
-                     Outras  = Valor dos Serviços
-                     V.Cont. = Valor dos Serviços
-    """
     iss_retido     = safe(row, "ISS Retido").strip().upper()
-    valor_servicos = limpa_valor(safe(row, "Valor dos Serviços"))
-    aliquota       = limpa_aliquota(safe(row, "Alíquota"))
-    valor_iss      = limpa_valor(safe(row, "Valor ISS"))
+    valor_servicos = limpa_valor(
+        safe(row, "Valor dos Servi\u00e7os") or safe(row, "Valor dos Servicos")
+    )
+    aliquota = limpa_aliquota(safe(row, "Al\u00edquota") or safe(row, "Aliquota"))
+    valor_iss = limpa_valor(safe(row, "Valor ISS"))
 
     if iss_retido == "S":
-        cod_imposto = "18"          # ISS Retido
+        cod_imposto = "18"
         base        = valor_servicos
         aliq        = aliquota
         valor       = valor_iss
         outras      = ""
     else:
-        cod_imposto = "3"           # ISS Normal
+        cod_imposto = "3"
         base        = "0.00"
         aliq        = "0.00"
         valor       = "0.00"
         outras      = valor_servicos
 
     return [
-        "1020",         # 1  - Identificação do registro
-        cod_imposto,    # 2  - Código do imposto (18=ISS Retido / 3=ISS)
-        "",             # 3  - Percentual de redução da base de cálculo
-        base,           # 4  - Base de cálculo
-        aliq,           # 5  - Alíquota
+        "1020",         # 1  - Identificacao do registro
+        cod_imposto,    # 2  - Codigo do imposto (18=ISS Retido / 3=ISS)
+        "",             # 3  - Percentual de reducao da base de calculo
+        base,           # 4  - Base de calculo
+        aliq,           # 5  - Aliquota
         valor,          # 6  - Valor do Imposto
         "",             # 7  - Valor de Isentas
-        outras,         # 8  - Valor de Outras (Valor Serviços quando ISS Normal)
+        outras,         # 8  - Valor de Outras (Valor Servicos quando ISS Normal)
         "",             # 9  - Valor do IPI
-        "",             # 10 - Valor da substituição Tributária
-        valor_servicos, # 11 - Valor Contábil (sempre = Valor dos Serviços)
-        "",             # 12 - Código do recolhimento do imposto
-        "",             # 13 - Valor não tributadas (só GO)
-        "",             # 14 - Valor parcela reduzida (só GO)
-        "",             # 15 - Alíq. Interestadual
+        "",             # 10 - Valor da substituicao Tributaria
+        valor_servicos, # 11 - Valor Contabil (sempre = Valor dos Servicos)
+        "",             # 12 - Codigo do recolhimento do imposto
+        "",             # 13 - Valor nao tributadas (so GO)
+        "",             # 14 - Valor parcela reduzida (so GO)
+        "",             # 15 - Aliq. Interestadual
         "",             # 16 - Nat. rend.
-        "",             # 17 - Tipo de Dedução
-        "",             # 18 - Tipo de Isenção
-        "",             # 19 - Descrição
+        "",             # 17 - Tipo de Deducao
+        "",             # 18 - Tipo de Isencao
+        "",             # 19 - Descricao
     ]
 
 
 def reg_1150(row) -> list:
-    """
-    Registro 1150 – IBS (Imposto sobre Bens e Serviços).
-    Filho do registro 1000. Campos: cClassTrib, Base, Alíquota, Valor.
-    Gerado em branco — alíquotas IBS ainda não definidas para a maioria dos serviços.
-    """
     return [
-        "1150",  # 1 - Identificação do registro (fixo)
+        "1150",  # 1 - Identificacao do registro
         "",      # 2 - IBS cClassTrib
-        "",      # 3 - IBS Base de cálculo (2 decimais)
-        "",      # 4 - IBS Alíquota (2 decimais)
-        "",      # 5 - IBS Valor (2 decimais)
+        "",      # 3 - IBS Base de calculo
+        "",      # 4 - IBS Aliquota
+        "",      # 5 - IBS Valor
     ]
 
 
 def reg_1151(row) -> list:
-    """
-    Registro 1151 – CBS (Contribuição sobre Bens e Serviços).
-    Filho do registro 1000. Campos: cClassTrib, Base, Alíquota, Valor.
-    Gerado em branco — alíquotas CBS ainda não definidas para a maioria dos serviços.
-    """
     return [
-        "1151",  # 1 - Identificação do registro (fixo)
+        "1151",  # 1 - Identificacao do registro
         "",      # 2 - CBS cClassTrib
-        "",      # 3 - CBS Base de cálculo (2 decimais)
-        "",      # 4 - CBS Alíquota (2 decimais)
-        "",      # 5 - CBS Valor (2 decimais)
+        "",      # 3 - CBS Base de calculo
+        "",      # 4 - CBS Aliquota
+        "",      # 5 - CBS Valor
     ]
 
 
@@ -864,18 +821,12 @@ def converte_nfts(
     auto_geocode: bool,
     pais_manual_override: str,
 ) -> tuple:
-    """
-    Converte DataFrame da NFTS para registros Domínio.
-    Retorna (csv_string, df_preview, erros_list).
-    """
     registros = []
     preview   = []
     erros     = []
 
-    # Registro 0000 — uma única vez
     registros.append(reg_0000(cnpj_empresa))
 
-    # Filtra apenas Tipo de Registro = "4" (notas)
     df_notas = df[df["Tipo de Registro"].astype(str).str.strip() == "4"].copy()
     if df_notas.empty:
         erros.append("Nenhum registro do tipo '4' (nota) encontrado no arquivo.")
@@ -895,32 +846,31 @@ def converte_nfts(
         try:
             ind   = safe(row, "Indicador de CPF/CNPJ do Prestador")
             cnpj  = limpa_cnpj(safe(row, "CPF/CNPJ do Prestador"))
-            razao = safe(row, "Razão Social do Prestador")
-
+            razao = (
+                safe(row, "Raz\u00e3o Social do Prestador")
+                or safe(row, "Razao Social do Prestador")
+            )
             chave_forn = (
                 f"EXT_{razao[:50]}" if (ind == "3" or not cnpj) else cnpj
             )
 
-            # ── Detecta país para prestadores estrangeiros ──────────────
             cod_pais_ext  = ""
             nome_pais_ext = ""
             geo_info      = ""
 
             if ind == "3":
-                # Prioridade 1: override manual do usuário
                 if pais_manual_override:
-                    cod_pais_ext  = pais_manual_override
+                    cod_pais_ext = pais_manual_override
                     nome_pais_ext = next(
                         (n for iso, (n, c) in TABELA_PAISES.items()
-                         if c == pais_manual_override), ""
+                         if c == pais_manual_override),
+                        "",
                     )
-                    geo_info = f"Manual: {nome_pais_ext} (cód. {cod_pais_ext})"
-
-                # Prioridade 2: geocoder automático
+                    geo_info = f"Manual: {nome_pais_ext} (cod. {cod_pais_ext})"
                 elif auto_geocode:
                     end_parts = [
-                        safe(row, "Endereço do Prestador"),
-                        safe(row, "Número do Endereço do Prestador"),
+                        safe(row, "Endere\u00e7o do Prestador") or safe(row, "Endereco do Prestador"),
+                        safe(row, "N\u00famero do Endere\u00e7o do Prestador") or safe(row, "Numero do Endereco do Prestador"),
                         safe(row, "Bairro do Prestador"),
                         safe(row, "Cidade do Prestador"),
                         safe(row, "UF do Prestador"),
@@ -931,59 +881,45 @@ def converte_nfts(
                         cod_pais_ext  = geo.get("cod_dominio", "")
                         nome_pais_ext = geo.get("nome_dominio", "")
                         if geo.get("erro") and not cod_pais_ext:
-                            geo_info = f"⚠️ {geo['erro']}"
-                            erros.append(
-                                f"Linha {idx} ({razao}): {geo['erro']}"
-                            )
+                            geo_info = f"Aviso: {geo['erro']}"
+                            erros.append(f"Linha {idx} ({razao}): {geo['erro']}")
                         else:
-                            geo_info = (
-                                f"OSM: {nome_pais_ext} "
-                                f"(cód. {cod_pais_ext})"
-                            )
+                            geo_info = f"OSM: {nome_pais_ext} (cod. {cod_pais_ext})"
 
-            # ── Registro 0020 — apenas uma vez por fornecedor ───────────
             if chave_forn not in fornecedores_gerados:
                 registros.append(reg_0020(row, cod_pais=cod_pais_ext))
                 fornecedores_gerados.add(chave_forn)
 
-            # ── Registro 1000 ───────────────────────────────────────────
-            registros.append(
-                reg_1000(row, cfop, cod_acumulador, cod_especie)
-            )
-
-            # ── Registro 1020 — sempre gerado ───────────────────────────
+            registros.append(reg_1000(row, cfop, cod_acumulador, cod_especie))
             registros.append(reg_1020(row))
 
-            # ── Registros 1150 / 1151 — opcionais ──────────────────────
             if gerar_ibs_cbs:
                 registros.append(reg_1150(row))
                 registros.append(reg_1151(row))
 
-            # ── Preview ─────────────────────────────────────────────────
-            iss_ret = safe(row, "ISS Retido").upper()
+            iss_ret        = safe(row, "ISS Retido").upper()
+            valor_servicos = (
+                safe(row, "Valor dos Servi\u00e7os")
+                or safe(row, "Valor dos Servicos")
+            )
             preview.append({
-                "Nº NFTS"        : safe(row, "Nº NFTS"),
-                "Prestador"      : razao,
-                "CNPJ/CPF"       : safe(row, "CPF/CNPJ do Prestador"),
-                "Tipo"           : "Estrangeiro" if ind == "3" else "Nacional",
-                "País (Domínio)" : f"{nome_pais_ext} [{cod_pais_ext}]"
-                                   if cod_pais_ext else (
-                                       geo_info if geo_info else "—"
-                                   ),
-                "Emissão"        : safe(row, "Data Hora Emissão NFTS"),
-                "Prestação"      : safe(row, "Data da Prestação de Serviços"),
-                "Valor Serviços" : safe(row, "Valor dos Serviços"),
-                "Alíquota ISS"   : safe(row, "Alíquota"),
-                "Valor ISS"      : safe(row, "Valor ISS"),
-                "ISS Retido"     : iss_ret,
-                "Cód. Imposto"   : "18 – ISS Retido" if iss_ret == "S"
-                                   else "3 – ISS",
-                "Base 1020"      : limpa_valor(safe(row, "Valor dos Serviços"))
-                                   if iss_ret == "S" else "0.00",
-                "Outras 1020"    : "" if iss_ret == "S"
-                                   else limpa_valor(
-                                       safe(row, "Valor dos Serviços")
-                                   ),
+                "Nr NFTS"       : safe(row, "N\u00ba NFTS") or safe(row, "Nr NFTS"),
+                "Prestador"     : razao,
+                "CNPJ/CPF"      : safe(row, "CPF/CNPJ do Prestador"),
+                "Tipo"          : "Estrangeiro" if ind == "3" else "Nacional",
+                "Pais Dominio"  : (
+                    f"{nome_pais_ext} [{cod_pais_ext}]"
+                    if cod_pais_ext else (geo_info if geo_info else "-")
+                ),
+                "Emissao"       : safe(row, "Data Hora Emiss\u00e3o NFTS") or safe(row, "Data Hora Emissao NFTS"),
+                "Prestacao"     : safe(row, "Data da Presta\u00e7\u00e3o de Servi\u00e7os") or safe(row, "Data da Prestacao de Servicos"),
+                "Valor Servicos": valor_servicos,
+                "Aliquota ISS"  : safe(row, "Al\u00edquota") or safe(row, "Aliquota"),
+                "Valor ISS"     : safe(row, "Valor ISS"),
+                "ISS Retido"    : iss_ret,
+                "Cod Imposto"   : "18 - ISS Retido" if iss_ret == "S" else "3 - ISS",
+                "Base 1020"     : limpa_valor(valor_servicos) if iss_ret == "S" else "0.00",
+                "Outras 1020"   : "" if iss_ret == "S" else limpa_valor(valor_servicos),
             })
 
         except Exception as e:
@@ -995,94 +931,100 @@ def converte_nfts(
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# INTERFACE STREAMLIT
+# HELPERS DE UI
 # ════════════════════════════════════════════════════════════════════════════
 
-st.title("🧾 Conversor NFTS Paulistana → Domínio Sistemas")
-st.caption(
-    "Converte o CSV exportado da **NFS-e Tomadas (NFTS)** da Prefeitura de São Paulo "
-    "para o layout de importação do **Domínio Sistemas** — "
-    "Registros 0000 · 0020 · 1000 · 1020 · 1150 · 1151"
-)
-
-# ── Tabs principais ──────────────────────────────────────────────────────
-tab_converter, tab_paises, tab_ajuda = st.tabs([
-    "🔄 Converter", "🌍 Países", "📖 Ajuda"
-])
-
-# ════════════════════════════════════════════════════════════════════════════
-# SIDEBAR — Configurações
-# ════════════════════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.header("⚙️ Configurações")
-
-    st.subheader("Empresa Tomadora")
-    cnpj_empresa = st.text_input(
-        "CNPJ (apenas números)",
-        placeholder="20586841000130",
-        help="CNPJ do tomador dos serviços (sua empresa).",
-    )
-
-    st.subheader("Parâmetros Domínio")
-    cfop = st.text_input(
-        "CFOP", value="2933",
-        help="CFOP para serviços tomados. Ex.: 2933.",
-    )
-    cod_acumulador = st.text_input(
-        "Código do Acumulador", value="",
-        help="Código do acumulador configurado no Domínio.",
-    )
-    cod_especie = st.text_input(
-        "Código da Espécie", value="03",
-        help="03 = Nota Fiscal de Serviço.",
-    )
-
-    st.subheader("Opções de Geração")
-    apenas_iss_retido = st.checkbox(
-        "Apenas notas com ISS Retido", value=False,
-    )
-    gerar_ibs_cbs = st.checkbox(
-        "Gerar registros 1150 (IBS) e 1151 (CBS)", value=False,
-        help="Gera os registros em branco. Ative se o Domínio exigir.",
-    )
-
-    st.subheader("🌍 Prestadores Estrangeiros")
-    auto_geocode = st.checkbox(
-        "Detectar país automaticamente (OSM/Nominatim)",
-        value=True,
-        help="Consulta o OpenStreetMap para identificar o país pelo endereço.",
-    )
-
-    # Selectbox de override manual — ordenado pelo código Domínio
+def _opcoes_paises() -> tuple:
+    """Retorna (lista_iso_ordenada, lista_labels) para selectbox."""
     opcoes_iso = sorted(
         TABELA_PAISES.keys(), key=lambda k: int(TABELA_PAISES[k][1])
     )
-    opcoes_label = ["(Automático / sem override)"] + [
-        f"{TABELA_PAISES[iso][1]:>3} – {TABELA_PAISES[iso][0]}"
+    opcoes_label = [
+        f"{TABELA_PAISES[iso][1]:>3} - {TABELA_PAISES[iso][0]}"
         for iso in opcoes_iso
     ]
+    return opcoes_iso, opcoes_label
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ════════════════════════════════════════════════════════════════════════════
+
+with st.sidebar:
+    st.header("Configuracoes")
+
+    st.subheader("Empresa Tomadora")
+    cnpj_empresa = st.text_input(
+        "CNPJ (apenas numeros)",
+        placeholder="20586841000130",
+        help="CNPJ do tomador dos servicos (sua empresa).",
+    )
+
+    st.subheader("Parametros Dominio")
+    cfop = st.text_input(
+        "CFOP", value="2933",
+        help="CFOP para servicos tomados. Ex.: 2933.",
+    )
+    cod_acumulador = st.text_input(
+        "Codigo do Acumulador", value="",
+        help="Codigo do acumulador configurado no Dominio.",
+    )
+    cod_especie = st.text_input(
+        "Codigo da Especie", value="03",
+        help="03 = Nota Fiscal de Servico.",
+    )
+
+    st.subheader("Opcoes de Geracao")
+    apenas_iss_retido = st.checkbox("Apenas notas com ISS Retido", value=False)
+    gerar_ibs_cbs     = st.checkbox(
+        "Gerar registros 1150 (IBS) e 1151 (CBS)", value=False,
+        help="Gera os registros em branco. Ative se o Dominio exigir.",
+    )
+
+    st.subheader("Prestadores Estrangeiros")
+    auto_geocode = st.checkbox(
+        "Detectar pais automaticamente (OSM/Nominatim)",
+        value=True,
+        help="Consulta o OpenStreetMap para identificar o pais pelo endereco.",
+    )
+
+    opcoes_iso_sb, opcoes_label_sb = _opcoes_paises()
     sel_override = st.selectbox(
-        "Forçar país para todos os estrangeiros",
-        options=opcoes_label,
+        "Forcar pais para todos os estrangeiros",
+        options=["(Automatico / sem override)"] + opcoes_label_sb,
         index=0,
-        help=(
-            "Selecione para forçar um país específico para TODOS os "
-            "prestadores estrangeiros, ignorando o geocoder."
-        ),
+        help="Selecione para forcar um pais especifico para TODOS os prestadores estrangeiros.",
     )
     pais_manual_override = ""
-    if sel_override != "(Automático / sem override)":
-        pais_manual_override = sel_override.split(" – ")[0].strip()
+    if sel_override != "(Automatico / sem override)":
+        pais_manual_override = sel_override.split(" - ")[0].strip()
 
     st.divider()
-    st.caption("v3.0 · NFTS → Domínio Sistemas")
+    st.caption("v3.0 - NFTS Paulistana para Dominio Sistemas")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TITULO
+# ════════════════════════════════════════════════════════════════════════════
+
+st.title("Conversor NFTS Paulistana para Dominio Sistemas")
+st.caption(
+    "Converte o CSV exportado da NFS-e Tomadas (NFTS) da Prefeitura de Sao Paulo "
+    "para o layout de importacao do Dominio Sistemas — "
+    "Registros 0000, 0020, 1000, 1020, 1150, 1151"
+)
+
+tab_converter, tab_paises, tab_ajuda = st.tabs(
+    ["Converter", "Paises", "Ajuda"]
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # TAB 1 — CONVERTER
 # ════════════════════════════════════════════════════════════════════════════
+
 with tab_converter:
-    st.subheader("📂 Upload do arquivo NFTS")
+    st.subheader("Upload do arquivo NFTS")
     arquivo = st.file_uploader(
         "Selecione o CSV exportado da NFTS (Prefeitura de SP)",
         type=["csv"],
@@ -1090,7 +1032,6 @@ with tab_converter:
     )
 
     if arquivo:
-        # Leitura com fallback de encoding
         try:
             df_raw = pd.read_csv(
                 arquivo, sep=",", dtype=str,
@@ -1107,46 +1048,40 @@ with tab_converter:
         notas_tipo4  = (
             df_raw["Tipo de Registro"].astype(str).str.strip() == "4"
         ).sum()
+
+        col_ind = "Indicador de CPF/CNPJ do Prestador"
         notas_ext = 0
-        if "Indicador de CPF/CNPJ do Prestador" in df_raw.columns:
-            df_t4 = df_raw[
-                df_raw["Tipo de Registro"].astype(str).str.strip() == "4"
-            ]
-            notas_ext = (
-                df_t4["Indicador de CPF/CNPJ do Prestador"]
-                .astype(str).str.strip() == "3.0"
-            ).sum()
+        if col_ind in df_raw.columns:
+            df_t4     = df_raw[df_raw["Tipo de Registro"].astype(str).str.strip() == "4"]
+            notas_ext = df_t4[col_ind].astype(str).str.strip().isin(["3", "3.0"]).sum()
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Linhas no arquivo", total_linhas)
         c2.metric("Notas (Tipo 4)",    notas_tipo4)
         c3.metric("Prestadores EXT",   notas_ext)
 
-        with st.expander("👁️ Dados brutos do CSV"):
+        with st.expander("Visualizar dados brutos do CSV"):
             st.dataframe(df_raw, use_container_width=True)
 
-        # Validações
         avisos = []
         if not cnpj_empresa:
-            avisos.append("⚠️ Informe o **CNPJ da empresa** na barra lateral.")
+            avisos.append("Informe o CNPJ da empresa na barra lateral.")
         if not cfop:
-            avisos.append("⚠️ Informe o **CFOP** na barra lateral.")
+            avisos.append("Informe o CFOP na barra lateral.")
         if not cod_acumulador:
-            avisos.append(
-                "⚠️ Informe o **Código do Acumulador** na barra lateral."
-            )
+            avisos.append("Informe o Codigo do Acumulador na barra lateral.")
         for av in avisos:
             st.warning(av)
 
         if not avisos:
             if notas_ext > 0 and auto_geocode and not pais_manual_override:
                 st.info(
-                    f"🌍 **{notas_ext}** nota(s) com prestador estrangeiro "
-                    "detectada(s). O país será buscado automaticamente pelo "
-                    "OpenStreetMap (pode levar alguns segundos por nota)."
+                    f"{notas_ext} nota(s) com prestador estrangeiro detectada(s). "
+                    "O pais sera buscado automaticamente pelo OpenStreetMap "
+                    "(pode levar alguns segundos por nota)."
                 )
 
-            if st.button("🚀 Converter para layout Domínio", type="primary"):
+            if st.button("Converter para layout Dominio", type="primary"):
                 with st.spinner("Convertendo..."):
                     csv_saida, df_prev, erros = converte_nfts(
                         df=df_raw,
@@ -1161,39 +1096,30 @@ with tab_converter:
                     )
 
                 if erros:
-                    with st.expander(
-                        f"⚠️ {len(erros)} aviso(s) durante a conversão"
-                    ):
+                    with st.expander(f"{len(erros)} aviso(s) durante a conversao"):
                         for e in erros:
                             st.warning(e)
 
                 if not df_prev.empty:
                     st.success(
-                        f"✅ Conversão concluída! "
-                        f"**{len(df_prev)}** nota(s) processada(s)."
+                        f"Conversao concluida! {len(df_prev)} nota(s) processada(s)."
                     )
 
-                    # Métricas
                     m1, m2, m3, m4 = st.columns(4)
                     n_ret = (df_prev["ISS Retido"] == "S").sum()
                     n_nor = (df_prev["ISS Retido"] == "N").sum()
-                    total_val = df_prev["Valor Serviços"].apply(
-                        lambda x: float(limpa_valor(x))
-                        if limpa_valor(x) else 0.0
+                    total_val = df_prev["Valor Servicos"].apply(
+                        lambda x: float(limpa_valor(x)) if limpa_valor(x) else 0.0
                     ).sum()
                     m1.metric("Total de notas",       len(df_prev))
-                    m2.metric("ISS Retido (cód. 18)", n_ret)
-                    m3.metric("ISS Normal (cód. 3)",  n_nor)
-                    m4.metric("Total Serviços R$",    f"{total_val:,.2f}")
+                    m2.metric("ISS Retido (cod. 18)", n_ret)
+                    m3.metric("ISS Normal (cod. 3)",  n_nor)
+                    m4.metric("Total Servicos R$",    f"{total_val:,.2f}")
 
-                    # Preview com destaque por ISS Retido
-                    st.subheader("📋 Preview das notas convertidas")
+                    st.subheader("Preview das notas convertidas")
 
                     def highlight_iss(row):
-                        cor = (
-                            "#d4edda" if row["ISS Retido"] == "S"
-                            else "#fff3cd"
-                        )
+                        cor = "#d4edda" if row["ISS Retido"] == "S" else "#fff3cd"
                         return [f"background-color: {cor}"] * len(row)
 
                     st.dataframe(
@@ -1201,63 +1127,61 @@ with tab_converter:
                         use_container_width=True,
                     )
 
-                    # Regra aplicada
-                    with st.expander("📐 Regra aplicada no Registro 1020"):
-                        st.markdown("""
-| Situação | Cód. | Base | Alíquota | Valor ISS | Campo **Outras** | V. Contábil |
-|---|---|---|---|---|---|---|
-| **ISS Retido** (`S`) | `18` | Valor Serviços | Alíquota nota | Valor ISS | *(vazio)* | Valor Serviços |
-| **ISS Normal** (`N`) | `3` | `0.00` | `0.00` | `0.00` | **Valor Serviços** | Valor Serviços |
-                        """)
+                    with st.expander("Regra aplicada no Registro 1020"):
+                        regra_rows = [
+                            ["ISS Retido (S)", "18", "Valor Servicos", "Aliquota nota", "Valor ISS", "(vazio)", "Valor Servicos"],
+                            ["ISS Normal (N)", "3",  "0.00",           "0.00",          "0.00",      "Valor Servicos", "Valor Servicos"],
+                        ]
+                        df_regra = pd.DataFrame(
+                            regra_rows,
+                            columns=["Situacao", "Cod", "Base (4)", "Aliq (5)", "Valor (6)", "Outras (8)", "V.Cont (11)"],
+                        )
+                        st.dataframe(df_regra, use_container_width=True, hide_index=True)
 
-                    # Prévia do arquivo gerado
-                    with st.expander(
-                        "📄 Prévia do arquivo gerado (50 primeiras linhas)"
-                    ):
+                    with st.expander("Previa do arquivo gerado (50 primeiras linhas)"):
                         linhas = csv_saida.split("\n")[:50]
                         st.code("\n".join(linhas), language="text")
 
-                    # Download
                     nome_saida = arquivo.name.replace(".csv", "_DOMINIO.txt")
                     st.download_button(
-                        label="⬇️ Baixar arquivo para importação no Domínio",
+                        label="Baixar arquivo para importacao no Dominio",
                         data=csv_saida.encode("utf-8"),
                         file_name=nome_saida,
                         mime="text/plain",
                         type="primary",
                     )
                     st.info(
-                        "💡 **Como importar:** No Domínio Sistemas acesse "
-                        "*Utilitários → Importação → Notas Fiscais de Entrada* "
+                        "Como importar: No Dominio Sistemas acesse "
+                        "Utilitarios > Importacao > Notas Fiscais de Entrada "
                         "e selecione o arquivo gerado."
                     )
     else:
-        st.info("⬆️ Faça o upload do arquivo CSV da NFTS para iniciar.")
+        st.info("Faca o upload do arquivo CSV da NFTS para iniciar.")
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# TAB 2 — PAÍSES
+# TAB 2 — PAISES
 # ════════════════════════════════════════════════════════════════════════════
+
 with tab_paises:
-    st.subheader("🌍 Consulta de País por Endereço")
+    st.subheader("Consulta de Pais por Endereco")
     st.markdown(
-        "Identifique o **código interno do Domínio Sistemas** de qualquer país "
-        "a partir de um endereço. Útil para conferir prestadores estrangeiros "
+        "Identifique o codigo interno do Dominio Sistemas de qualquer pais "
+        "a partir de um endereco. Util para conferir prestadores estrangeiros "
         "antes de converter."
     )
 
     col_end, col_btn = st.columns([4, 1])
     with col_end:
         end_consulta = st.text_input(
-            "Endereço para busca",
+            "Endereco para busca",
             value="2108 North Street, Sacramento, CA",
-            placeholder="Ex.: 2108 North Street, Sacramento, CA",
             key="geo_manual_end",
         )
     with col_btn:
         st.write("")
         st.write("")
-        buscar_pais = st.button("🔍 Buscar", key="geo_manual_btn")
+        buscar_pais = st.button("Buscar", key="geo_manual_btn")
 
     iso_detectado = ""
     if buscar_pais and end_consulta:
@@ -1265,155 +1189,170 @@ with tab_paises:
             res = detectar_pais_por_endereco(end_consulta)
 
         if res["cod_dominio"]:
-            icone = {"alta": "✅", "media": "🟡", "baixa": "🔴"}.get(
-                res["confianca"], "❓"
+            icone = {"alta": "OK", "media": "Parcial", "baixa": "Baixa"}.get(
+                res["confianca"], "?"
             )
             st.success(
-                f"{icone} **País detectado:** {res['nome_dominio']}  \n"
-                f"🌐 **Nome (EN):** {res['nome_en']}  \n"
-                f"🏷️ **ISO Alpha-2:** `{res['iso2']}`  \n"
-                f"🔢 **Código Domínio:** `{res['cod_dominio']}`  \n"
-                f"📍 **Endereço completo:** {res['endereco_completo']}"
+                f"Confianca: {icone}\n\n"
+                f"Pais detectado: {res['nome_dominio']}\n\n"
+                f"Nome (EN): {res['nome_en']}\n\n"
+                f"ISO Alpha-2: {res['iso2']}\n\n"
+                f"Codigo Dominio: {res['cod_dominio']}\n\n"
+                f"Endereco completo: {res['endereco_completo']}"
             )
             iso_detectado = res["iso2"]
         else:
-            st.error(f"❌ {res['erro']}")
+            st.error(f"Erro: {res['erro']}")
             if res.get("nome_en"):
                 st.info(
-                    f"País detectado pelo OSM: **{res['nome_en']}** "
-                    f"(ISO: `{res['iso2']}`) — não encontrado na tabela Domínio. "
+                    f"Pais detectado pelo OSM: {res['nome_en']} "
+                    f"(ISO: {res['iso2']}) - nao encontrado na tabela Dominio. "
                     "Selecione manualmente abaixo."
                 )
 
-    # Selectbox de confirmação manual
     st.markdown("---")
-    st.markdown("##### Selecionar / confirmar país manualmente")
-    opcoes_iso_t = sorted(
-        TABELA_PAISES.keys(), key=lambda k: int(TABELA_PAISES[k][1])
-    )
-    opcoes_label_t = [
-        f"{TABELA_PAISES[iso][1]:>3} – {TABELA_PAISES[iso][0]}"
-        for iso in opcoes_iso_t
-    ]
+    st.markdown("##### Selecionar / confirmar pais manualmente")
+
+    opcoes_iso_t, opcoes_label_t = _opcoes_paises()
     idx_def = 0
     if iso_detectado and iso_detectado in opcoes_iso_t:
         idx_def = opcoes_iso_t.index(iso_detectado)
 
     sel_manual = st.selectbox(
-        "País (Tabela Domínio — ordenado por código)",
+        "Pais (Tabela Dominio - ordenado por codigo)",
         options=opcoes_label_t,
         index=idx_def,
         key="geo_manual_sel",
     )
     if sel_manual:
-        cod_sel = sel_manual.split(" – ")[0].strip()
-        nome_sel = sel_manual.split(" – ", 1)[1] if " – " in sel_manual else ""
+        partes   = sel_manual.split(" - ", 1)
+        cod_sel  = partes[0].strip()
+        nome_sel = partes[1] if len(partes) > 1 else ""
         st.success(
-            f"✅ Código Domínio: **`{cod_sel}`** — {nome_sel}  \n"
+            f"Codigo Dominio: {cod_sel} - {nome_sel}  "
             "Use este valor no campo 11 do Registro 0020 "
             "ou selecione-o no override da barra lateral."
         )
 
-    # Tabela completa
     st.markdown("---")
-    st.markdown("##### 📋 Tabela completa de Países — Domínio Sistemas")
+    st.markdown("##### Tabela completa de Paises - Dominio Sistemas")
 
-    busca_pais = st.text_input(
-        "🔎 Filtrar tabela",
-        placeholder="Digite nome ou código...",
+    busca_pais_filtro = st.text_input(
+        "Filtrar tabela",
+        placeholder="Digite nome ou codigo...",
         key="filtro_tabela_paises",
     )
 
     df_paises = pd.DataFrame([
         {
-            "Código Domínio": int(cod),
+            "Codigo Dominio": int(cod),
             "ISO Alpha-2":    iso,
-            "Nome (Domínio)": nome,
+            "Nome (Dominio)": nome,
         }
         for iso, (nome, cod) in TABELA_PAISES.items()
-    ]).sort_values("Código Domínio").reset_index(drop=True)
+    ]).sort_values("Codigo Dominio").reset_index(drop=True)
 
-    if busca_pais:
+    if busca_pais_filtro:
         mask = (
-            df_paises["Nome (Domínio)"].str.contains(
-                busca_pais, case=False, na=False
-            ) |
-            df_paises["Código Domínio"].astype(str).str.contains(
-                busca_pais, na=False
-            ) |
-            df_paises["ISO Alpha-2"].str.contains(
-                busca_pais, case=False, na=False
+            df_paises["Nome (Dominio)"].str.contains(
+                busca_pais_filtro, case=False, na=False
+            )
+            | df_paises["Codigo Dominio"].astype(str).str.contains(
+                busca_pais_filtro, na=False
+            )
+            | df_paises["ISO Alpha-2"].str.contains(
+                busca_pais_filtro, case=False, na=False
             )
         )
         df_paises = df_paises[mask]
 
     st.dataframe(df_paises, use_container_width=True, height=400)
-    st.caption(f"Total: {len(df_paises)} países")
+    st.caption(f"Total: {len(df_paises)} paises")
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # TAB 3 — AJUDA
 # ════════════════════════════════════════════════════════════════════════════
+
 with tab_ajuda:
-    st.subheader("📖 Documentação e Mapeamento de Campos")
+    st.subheader("Documentacao e Mapeamento de Campos")
 
-    st.markdown("""
-### Registros gerados
+    st.markdown("### Registros gerados")
+    df_regs = pd.DataFrame([
+        ["0000", "Identificacao da empresa (tomadora)", "Configuracao"],
+        ["0020", "Cadastro do fornecedor (prestador) - 1 por CNPJ", "NFTS"],
+        ["1000", "Nota Fiscal de Entrada", "NFTS"],
+        ["1020", "Impostos (ISS Retido cod.18 ou ISS Normal cod.3)", "NFTS"],
+        ["1150", "IBS - Imposto sobre Bens e Servicos (opcional)", "Em branco"],
+        ["1151", "CBS - Contribuicao sobre Bens e Servicos (opcional)", "Em branco"],
+    ], columns=["Registro", "Descricao", "Fonte"])
+    st.dataframe(df_regs, use_container_width=True, hide_index=True)
 
-| Registro | Descrição | Fonte |
-|---|---|---|
-| `0000` | Identificação da empresa (tomadora) | Configuração |
-| `0020` | Cadastro do fornecedor (prestador) — 1 por CNPJ | NFTS |
-| `1000` | Nota Fiscal de Entrada | NFTS |
-| `1020` | Impostos (ISS Retido cód. 18 **ou** ISS Normal cód. 3) | NFTS |
-| `1150` | IBS — Imposto sobre Bens e Serviços (opcional) | Em branco |
-| `1151` | CBS — Contribuição sobre Bens e Serviços (opcional) | Em branco |
+    st.markdown("### Regra do Registro 1020")
+    df_regra = pd.DataFrame([
+        ["ISS Retido (S)", "18", "Valor Servicos", "Aliquota nota", "Valor ISS", "(vazio)", "Valor Servicos"],
+        ["ISS Normal (N)", "3",  "0.00",           "0.00",          "0.00",      "Valor Servicos", "Valor Servicos"],
+    ], columns=["Situacao", "Cod", "Campo 4 Base", "Campo 5 Aliq", "Campo 6 Valor", "Campo 8 Outras", "Campo 11 VCont"])
+    st.dataframe(df_regra, use_container_width=True, hide_index=True)
 
----
+    st.markdown("### Mapeamento NFTS para Dominio - Registro 1000")
+    df_map1000 = pd.DataFrame([
+        ["CPF/CNPJ do Prestador",              "Inscricao fornecedor",              "3"],
+        ["Codigo da especie",                  "Configuravel (padrao 03)",          "2"],
+        ["Codigo do acumulador",               "Configuravel na sidebar",           "5"],
+        ["CFOP",                               "Configuravel na sidebar",           "6"],
+        ["Numero do Documento",                "Numero do documento",               "8"],
+        ["Serie do Documento",                 "Serie",                             "9"],
+        ["Data da Prestacao de Servicos",      "Data da entrada + Competencia",     "11, 48"],
+        ["Data Hora Emissao NFTS",             "Data emissao",                      "12"],
+        ["Valor dos Servicos",                 "Valor contabil + Valor produtos",   "13, 39"],
+        ["ISS Retido = S",                     "Cod. Recolhimento ISS = 18",        "20"],
+        ["Inscricao Municipal do Prestador",   "Inscricao municipal fornecedor",    "45"],
+    ], columns=["Campo NFTS", "Campo Dominio", "Nr Campo"])
+    st.dataframe(df_map1000, use_container_width=True, hide_index=True)
 
-### Regra do Registro 1020
+    st.markdown("### Mapeamento NFTS para Dominio - Registro 0020")
+    df_map0020 = pd.DataFrame([
+        ["CPF/CNPJ do Prestador",              "Inscricao",               "2",  "Outros para estrangeiros"],
+        ["Razao Social do Prestador",          "Razao Social",            "3",  "Max. 150 chars"],
+        ["Endereco do Prestador",              "Endereco",                "5",  ""],
+        ["Numero do Endereco",                 "Numero",                  "6",  "Apenas numeros"],
+        ["Complemento",                        "Complemento",             "7",  ""],
+        ["Bairro do Prestador",                "Bairro",                  "8",  ""],
+        ["UF do Prestador",                    "UF",                      "10", "EX para exterior"],
+        ["Pais (geocoder/manual)",             "Codigo do Pais",          "11", "Codigo interno Dominio"],
+        ["CEP do Prestador",                   "CEP",                     "12", ""],
+        ["Inscricao Municipal do Prestador",   "Inscricao Municipal",     "14", ""],
+        ["Email do Prestador",                 "Email",                   "29", ""],
+    ], columns=["Campo NFTS", "Campo Dominio", "Nr", "Observacao"])
+    st.dataframe(df_map0020, use_container_width=True, hide_index=True)
 
-| ISS Retido | Cód. | Campo 4 (Base) | Campo 5 (Alíq.) | Campo 6 (Valor) | Campo 8 (Outras) | Campo 11 (V.Cont.) |
-|---|---|---|---|---|---|---|
-| **S** | `18` | Valor Serviços | Alíquota nota | Valor ISS | *(vazio)* | Valor Serviços |
-| **N** | `3` | `0.00` | `0.00` | `0.00` | **Valor Serviços** | Valor Serviços |
+    st.markdown("### Deteccao automatica de pais (prestadores estrangeiros)")
+    df_fluxo = pd.DataFrame([
+        ["1", "Endereco NFTS",        "Texto livre do campo Endereco do Prestador"],
+        ["2", "Nominatim / OSM",      "Geocodificacao gratuita (1 req/s)"],
+        ["3", "country_code ISO",     "Ex.: 'us' para Estados Unidos"],
+        ["4", "Tabela Paises.xls",    "Lookup pelo ISO Alpha-2"],
+        ["5", "Codigo Dominio",       "Ex.: 76 para ESTADOS UNIDOS"],
+        ["6", "Reg. 0020 campo 11",   "Preenchido automaticamente"],
+    ], columns=["Passo", "Etapa", "Detalhe"])
+    st.dataframe(df_fluxo, use_container_width=True, hide_index=True)
 
----
+    st.markdown("### Exemplo - Tenjin INC")
+    df_ex = pd.DataFrame([
+        ["Endereco buscado",    "2108 North Street, SACRAMENTO"],
+        ["OSM detecta",         "United States - ISO US"],
+        ["Tabela Dominio",      "US = 76 - ESTADOS UNIDOS"],
+        ["Reg. 0020 campo 10",  "EX"],
+        ["Reg. 0020 campo 11",  "76"],
+    ], columns=["Campo", "Valor"])
+    st.dataframe(df_ex, use_container_width=True, hide_index=True)
 
-### Mapeamento NFTS → Domínio (Reg. 1000)
-
-| Campo NFTS | Campo Domínio | Nº |
-|---|---|---|
-| CPF/CNPJ do Prestador | Inscrição fornecedor | 3 |
-| Código da espécie | Configurável (padrão `03`) | 2 |
-| Código do acumulador | Configurável na sidebar | 5 |
-| CFOP | Configurável na sidebar | 6 |
-| Número do Documento | Número do documento | 8 |
-| Série do Documento | Série | 9 |
-| Data da Prestação de Serviços | Data da entrada + Competência | 11, 48 |
-| Data Hora Emissão NFTS | Data emissão | 12 |
-| Valor dos Serviços | Valor contábil + Valor produtos | 13, 39 |
-| ISS Retido = S | Cód. Recolhimento ISS = `18` | 20 |
-| Inscrição Municipal do Prestador | Inscrição municipal fornecedor | 45 |
-
----
-
-### Mapeamento NFTS → Domínio (Reg. 0020)
-
-| Campo NFTS | Campo Domínio | Nº | Observação |
-|---|---|---|---|
-| CPF/CNPJ do Prestador | Inscrição | 2 | `Outros` para estrangeiros |
-| Razão Social do Prestador | Razão Social | 3 | Máx. 150 chars |
-| Endereço do Prestador | Endereço | 5 | |
-| Número do Endereço | Número | 6 | Apenas números |
-| Complemento | Complemento | 7 | |
-| Bairro do Prestador | Bairro | 8 | |
-| UF do Prestador | UF | 10 | `EX` para exterior |
-| País (geocoder/manual) | Código do País | 11 | Código interno Domínio |
-| CEP do Prestador | CEP | 12 | |
-| Inscrição Municipal do Prestador | Inscrição Municipal | 14 | |
-| Email do Prestador | Email | 29 | |
-
----
-
-### Detecção automática de país (prestadores estrangeiros)
+    st.markdown("### Como importar no Dominio Sistemas")
+    df_import = pd.DataFrame([
+        ["1", "Gere o arquivo clicando em Converter"],
+        ["2", "Baixe o arquivo .txt gerado"],
+        ["3", "No Dominio Sistemas acesse: Utilitarios > Importacao > Notas Fiscais de Entrada"],
+        ["4", "Selecione o arquivo e confirme a importacao"],
+    ], columns=["Passo", "Acao"])
+    st.dataframe(df_import, use_container_width=True, hide_index=True)
